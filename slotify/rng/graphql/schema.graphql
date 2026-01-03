@@ -1,0 +1,65 @@
+scalar JSON
+scalar JSONObject
+
+type Meta {
+    total: Int
+    limit: Int
+    offset: Int
+    hasPrev: Boolean
+    hasNext: Boolean
+}
+
+enum SortOrder {
+    ASC
+    DESC
+}
+input Sort {
+    field: String!
+    order: SortOrder!
+}
+enum FilterType {
+    IN
+    EQUAL
+    NOT_EQUAL
+    LIKE
+    GREATER
+    GREATER_OR_EQUAL
+    LOWER
+    LOWER_OR_EQUAL
+    NULL
+    NOT_NULL
+    CONTAIN
+}
+input Filter {
+    type: FilterType!
+    field: String!
+    jsonField: String
+    value: JSON
+}
+
+directive @auth(permission: String!) on FIELD_DEFINITION
+directive @log(variables: Boolean, result: Boolean) on FIELD_DEFINITION
+
+##########
+
+type RoundRngStates {
+    meta: Meta
+    items: [RoundRngState]
+}
+
+type RoundRngState {
+    clientSeed: String!
+    serverSeedHash: String!
+    nextServerSeedHash: String!
+    serverSeedStatus: String!
+    serverSeed: String
+    nonce: Int
+    cursor: Int
+    status: String
+}
+
+type Query {
+    schema: String!
+    roundRngStates(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): RoundRngStates! @auth(permission: "gameplay")
+    lastRngHash(roomId: ID!): String! @auth(permission: "manageRooms")
+}

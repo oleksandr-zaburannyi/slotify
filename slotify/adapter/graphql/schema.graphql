@@ -1,0 +1,586 @@
+scalar JSON
+scalar JSONObject
+
+type Meta {
+    total: Int
+    limit: Int
+    offset: Int
+    hasPrev: Boolean
+    hasNext: Boolean
+}
+
+enum SortOrder {
+    ASC
+    DESC
+}
+input Sort {
+    field: String!
+    order: SortOrder!
+}
+enum FilterType {
+    IN
+    EQUAL
+    NOT_EQUAL
+    LIKE
+    GREATER
+    GREATER_OR_EQUAL
+    LOWER
+    LOWER_OR_EQUAL
+    NULL
+    NOT_NULL
+    CONTAIN
+}
+input Filter {
+    type: FilterType!
+    field: String!
+    jsonField: String
+    value: JSON
+}
+
+directive @auth(permission: String!) on FIELD_DEFINITION
+directive @log(variables: Boolean, result: Boolean) on FIELD_DEFINITION
+
+##########
+
+type ReportReceiver {
+    id: ID
+    cron: String
+    report: String
+    account: String
+    email: String
+    comment: String
+    variables: JSON
+}
+
+type ReportReceivers {
+    meta: Meta
+    items: [ReportReceiver]
+}
+
+input ReportReceiverInput {
+    cron: String!
+    report: String!
+    email: String!
+    comment: String
+    variables: JSON
+}
+
+type ReportExclusion {
+    id: ID
+    createdAt: Float #timestamp
+    updatedAt: Float #timestamp
+    startsAt: Float #timestamp
+    endsAt: Float #timestamp
+    playerId: String
+    nativeId: String
+    wallet: String
+    operator: String
+    brand: String
+    currency: String
+    inspection: Boolean
+    gameWin: Boolean
+    comment: String
+    reason: String
+}
+
+type ReportExclusion {
+    meta: Meta
+    items: [ReportExclusion]
+}
+
+input ReportExclusionInput {
+    startsAt: Float
+    endsAt: Float
+    playerId: String
+    nativeId: String
+    wallet: String
+    operator: String
+    brand: String
+    currency: String
+    inspection: Boolean
+    gameWin: Boolean
+    comment: String
+    reason: String
+}
+
+type Player {
+    playerId: ID
+    nativeId: String
+    createdAt: Float #timestamp
+    currency: String
+    operator: String
+    brand: String
+    wallet: String
+    nickname: String
+    gender: String
+    country: String
+    jurisdiction: String
+    group: String
+    blocked: Boolean
+}
+type Players {
+    meta: Meta
+    items: [Player]
+}
+
+type Session {
+    sessionId: ID
+    createdAt: Float #timestamp
+    lastActivity: Float #timestamp
+    endedAt: Float #timestamp
+    playerId: String
+    provider: String
+    game: String
+    active: Boolean
+    ip: String
+    data: JSON
+}
+type Sessions {
+    meta: Meta
+    items: [Session]
+}
+
+type Transaction {
+    transactionId: ID
+    createdAt: Float #timestamp
+    finishedAt: Float #timestamp
+    cancelledAt: Float #timestamp
+    type: String
+    amount: Float
+    jackpotAmount: Float
+    currency: String
+    roundId: String
+    rgsRoundId: String
+    rgsTransactionId: String
+    sessionId: String
+    status: String
+    failReason: String
+    game: String
+    variant: String
+    channel: String
+    roundFinished: Boolean
+    rgs: String
+    provider: String
+    playerId: String
+    nativeId: String
+    category: String
+    name: String
+    campaignType: String
+    campaignId: String
+    balanceAfter: Float
+    winRatio: Float
+    operator: String
+    brand: String
+    wallet: String
+    jurisdiction: String
+    auto: Boolean
+    ip: String
+    replayUrl: String
+    verificationScore: Float
+    verificationDetails: JSON
+    verificationAction: String
+    regulatory: JSON
+}
+type Transactions {
+    meta: Meta
+    items: [Transaction]
+}
+
+type GameWinItem {
+    hour: String
+    day: String
+    month: String
+    quarter: String
+    year: String
+
+    playerId: String
+    nativeId: String
+    category: String
+    country: String
+    name: String
+    promotionType: String
+    game: String
+    gameTitle: String
+    provider: String
+    rgs: String
+    currency: String
+    jurisdiction: String
+    currencyExchangeRate: Float
+    operator: String
+    brand: String
+    wallet: String
+    walletGroup: String
+    playerGroup: String
+    variant: String
+    channel: String
+    totalBet: Float
+    totalWin: Float
+    jackpotContribution: Float
+    jackpotWin: Float
+    campaignId: String
+    campaignType: String
+    players: Int
+    bets: Int
+    wins: Int
+    gameWin: Float
+    rtp: Float
+    normalisedRtp: Float
+    excluded: Boolean
+}
+type GameWin {
+    meta: Meta
+    items: [GameWinItem]
+}
+
+type DGEGameSummaryItem {
+    from: String
+    to: String
+    game: String
+    wallet: String
+    operator: String
+    brand: String
+    bets: Int
+    wins: Int
+    totalBet: Float
+    totalWin: Float
+    gameWin: Float
+}
+type DGEGameSummary {
+    meta: Meta
+    items: [DGEGameSummaryItem]
+}
+
+input GameWinOptions {
+    convert: Boolean
+}
+
+type CurrencyExchanges {
+    meta: Meta
+    items: [CurrencyExchange]
+}
+
+type CurrencyExchange {
+    id: ID
+    date: Float #timestamp
+    currency: String
+    rate: Float
+    dailyDiff: Float
+    monthlyDiff: Float
+}
+
+type CurrencyAliases {
+    meta: Meta
+    items: [CurrencyAlias]
+}
+
+type CurrencyFeed {
+    feed: String
+    enabled: Boolean
+    config: JSON
+    currencies: JSON
+}
+
+type CurrencyFeeds {
+    meta: Meta
+    items: [CurrencyFeed]
+}
+
+type CurrencyAlias {
+    alias: String
+    currency: String
+    multiplier: Float
+}
+
+input CurrencyFeedInput {
+    enabled: Boolean
+    config: JSON
+    currencies: JSON
+}
+
+input CurrencyAliasInput {
+    alias: String
+    currency: String
+    multiplier: Float
+}
+
+input CurrencyExchangeInput {
+    currency: String
+    date: String
+    rate: Float
+}
+
+type WalletVerifierResultsSummary {
+    failed: Int
+    passed: Int
+}
+type WalletVerifierResultsTest {
+    name: String
+    request: WalletVerifierResultsRequest
+    assertions: [WalletVerifierResultsAssertion]
+}
+type WalletVerifierResultsAssertion {
+    passed: Boolean
+    message: String
+}
+
+type WalletVerifierResultsRequest {
+    url: String
+    method: String
+    body: String
+    text: String
+    status: String
+    headers: JSON
+    responseHeaders: [[String]]
+}
+
+type WalletVerifierResults {
+    summary: WalletVerifierResultsSummary
+    tests: [WalletVerifierResultsTest]
+}
+
+type Login {
+    account: Account
+    services: [String]
+    token: String
+}
+
+type Account {
+    email: ID!
+    comment: String
+    permissions: [String]
+    rgss: [String]
+    providers: [String]
+    wallets: [String]
+    operators: [String]
+    brands: [String]
+    ips: [String]
+    lastActivity: Float #timestamp
+}
+type Accounts {
+    meta: Meta
+    items: [Account!]
+}
+
+type RGS {
+    id: ID!
+    adapter: String
+    ips: [String]
+    config: JSONObject
+    inspectionConfig: JSONObject
+}
+type RGSs {
+    meta: Meta
+    items: [RGS!]
+}
+
+type Wallet {
+    id: ID!
+    adapter: String
+    group: String
+    enabled: Boolean
+    keyCacheExpiry: Float
+    email: String
+    ips: [String]
+    config: JSONObject
+    inspectionConfig: JSONObject
+    oneTimeKeyBlocked: Boolean
+    ipBlocked: Boolean
+    geoIpBlocked: Boolean
+    parallelTransactions: Boolean
+}
+type Wallets {
+    meta: Meta
+    items: [Wallet!]
+}
+
+type Game {
+    game: ID!
+    title: String
+    type: String
+    provider: String
+    rgs: String
+    rgsGame: String
+    wallets: [String]
+    operators: [String]
+    brands: [String]
+    inspectionConfig: JSONObject
+    rgsConfig: JSONObject
+}
+type Games {
+    meta: Meta
+    items: [Game!]
+}
+
+type AuditLog {
+    date: Float #timestamp
+    email: String
+    type: String!
+    action: String!
+    success: Boolean!
+    query: String
+    variables: JSON
+    result: JSON
+    ip: String
+    isIpWhitelisted: Boolean
+}
+
+type AuditLogs {
+    meta: Meta
+    items: [AuditLog!]
+}
+
+input WalletInput {
+    id: ID!
+    adapter: String
+    group: String
+    email: String
+    enabled: Boolean
+    keyCacheExpiry: Float
+    ips: [String]
+    config: JSONObject
+    inspectionConfig: JSONObject
+    oneTimeKeyBlocked: Boolean
+    ipBlocked: Boolean
+    geoIpBlocked: Boolean
+    parallelTransactions: Boolean
+}
+
+input GameInput {
+    game: ID!
+    title: String
+    type: String
+    provider: String
+    rgs: String
+    rgsGame: String
+    wallets: [String]
+    operators: [String]
+    brands: [String]
+    inspectionConfig: JSONObject
+    rgsConfig: JSONObject
+}
+
+input RGSInput {
+    id: ID!
+    adapter: String
+    ips: [String]
+    config: JSONObject
+    inspectionConfig: JSONObject
+}
+
+input AccountInput {
+    email: ID
+    comment: String
+    permissions: [String]
+    rgss: [String]
+    providers: [String]
+    wallets: [String]
+    operators: [String]
+    brands: [String]
+    ips: [String]
+}
+
+input PlayerInput {
+    blocked: Boolean
+    group: String
+}
+
+type AvailableGame {
+    game: String!
+    provider: String!
+    title: String
+    type: String
+}
+
+type ChangePasswordResult {
+    email: String
+}
+
+type Query {
+    ping: Boolean
+
+    auditLogs(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): AuditLogs! @auth(permission: "auditLogs")
+    games(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Games! @auth(permission: "games")
+    wallets(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Wallets! @auth(permission: "wallets")
+    rgss(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): RGSs! @auth(permission: "rgss")
+    accounts(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Accounts! @auth(permission: "accounts")
+    players(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Players! @auth(permission: "players")
+    sessions(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Sessions! @auth(permission: "sessions")
+    transactions(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Transactions! @auth(permission: "transactions")
+    gameWin(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): GameWin! @auth(permission: "gameWin")
+    DGE_gameSummary(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): DGEGameSummary! @auth(permission: "transactions")
+    currencyExchange(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CurrencyExchanges! @auth(permission: "currencyExchange")
+    currencyAliases(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CurrencyAliases! @auth(permission: "currencyAliases")
+    currencyFeeds(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CurrencyFeeds! @auth(permission: "manageCurrencies")
+    reportReceivers(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): ReportReceivers! @auth(permission: "reportSender")
+    reportExclusion(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): ReportExclusion! @auth(permission: "reportExclusion")
+    rgsList: [String] @auth(permission: "*")
+    walletList: [String] @auth(permission: "*")
+    gameList: [String] @auth(permission: "*")
+    providerList: [String] @auth(permission: "*")
+    operatorList: [String] @auth(permission: "*")
+    brandList: [String] @auth(permission: "*")
+    jurisdictionList: [String] @auth(permission: "*")
+    currencyList: [String] @auth(permission: "*")
+    availableGames(wallet: String, operator: String, brand: String): [AvailableGame] @auth(permission: "availableBets")
+}
+
+type ImportResults {
+    added: Int
+    edited: Int
+    ids: JSON
+}
+
+type Mutation {
+    resetPassword(email: String!): Boolean @log(variables: false, result: false)
+    changePassword(key: String!, password: String!): ChangePasswordResult @log(variables: false, result: false)
+
+    login(email: String!, password: String!): Login @log(variables: false, result: false)
+    logout: Boolean @log(variables: false, result: false)
+
+    addAccount(data: AccountInput!): ID @auth(permission: "manageAccounts") @log(variables: true, result: true)
+    editAccount(id: ID!, data: AccountInput!): Boolean @auth(permission: "manageAccounts") @log(variables: true, result: true)
+    deleteAccount(id: ID!): Boolean @auth(permission: "manageAccounts") @log(variables: true, result: true)
+    importAccounts(data: String!): ImportResults @auth(permission: "manageAccounts") @log(variables: true, result: true)
+
+    addCurrencyAlias(data: CurrencyAliasInput!): ID @auth(permission: "manageCurrencies") @log(variables: true, result: true)
+    editCurrencyAlias(alias: ID!, data: CurrencyAliasInput!): Boolean @auth(permission: "manageCurrencies") @log(variables: true, result: true)
+    deleteCurrencyAlias(alias: ID!): Boolean @auth(permission: "manageCurrencies") @log(variables: true, result: true)
+
+    addCurrencyExchange(data: CurrencyExchangeInput!): ID @auth(permission: "manageCurrencies") @log(variables: true, result: true)
+    editCurrencyExchange(id: ID!, data: CurrencyExchangeInput!): Boolean @auth(permission: "manageCurrencies") @log(variables: true, result: true)
+    deleteCurrencyExchange(id: ID!): Boolean @auth(permission: "manageCurrencies") @log(variables: true, result: true)
+    fetchCurrencies(date: String!): Boolean @auth(permission: "manageCurrencies") @log(variables: true, result: true)
+
+    editCurrencyFeed(feed: String!, data: CurrencyFeedInput!): Boolean @auth(permission: "manageCurrencies") @log(variables: true, result: true)
+
+    addRgs(data: RGSInput!): ID @auth(permission: "manageRgss") @log(variables: true, result: true)
+    editRgs(id: ID!, data: RGSInput!): Boolean @auth(permission: "manageRgss") @log(variables: true, result: true)
+    deleteRgs(id: ID!): Boolean @auth(permission: "manageRgss") @log(variables: true, result: true)
+
+    addWallet(data: WalletInput!): ID @auth(permission: "manageWallets") @log(variables: true, result: true)
+    editWallet(id: ID!, data: WalletInput!): Boolean @auth(permission: "manageWallets") @log(variables: true, result: true)
+    deleteWallet(id: ID!): Boolean @auth(permission: "manageWallets") @log(variables: true, result: true)
+    resetWalletInspection(id: ID!): Boolean @auth(permission: "manageWallets") @log(variables: true, result: true)
+
+    addGame(data: GameInput!): ID @auth(permission: "manageGames") @log(variables: true, result: true)
+    editGame(game: ID!, data: GameInput!): Boolean @auth(permission: "manageGames") @log(variables: true, result: true)
+    deleteGame(game: ID!): Boolean @auth(permission: "manageGames") @log(variables: true, result: true)
+    importGames(data: String!): ImportResults @auth(permission: "manageGames") @log(variables: true, result: true)
+
+    closeTransaction(id: ID!): Boolean @auth(permission: "closeTransaction") @log(variables: true, result: true)
+    regenerateGameWin(date: String!): Boolean @auth(permission: "regenerateGameWin") @log(variables: true, result: true)
+
+    editPlayer(id: ID!, value: PlayerInput!): Boolean @auth(permission: "managePlayers") @log(variables: true, result: true)
+    endSession(sessionId: ID!): Boolean @auth(permission: "sessions") @log(variables: true, result: true)
+
+    walletVerifier(wallet: String!, operator: String!, provider: String!, game: String!, key: String!, game2: String, key2: String): WalletVerifierResults! @auth(permission: "verifier")
+
+    addReportReceiver(data: ReportReceiverInput!): ID @auth(permission: "manageReportSender") @log(variables: true, result: true)
+    editReportReceiver(id: ID!, data: ReportReceiverInput!): Boolean @auth(permission: "manageReportSender") @log(variables: true, result: true)
+    deleteReportReceiver(id: ID!): Boolean @auth(permission: "manageReportSender") @log(variables: true, result: true)
+    sendReport(id: ID!): Boolean @auth(permission: "manageReportSender") @log(variables: true, result: true)
+
+    addReportExclusion(data: ReportExclusionInput!): ID @auth(permission: "manageReportExclusion") @log(variables: true, result: true)
+    editReportExclusion(id: ID!, data: ReportExclusionInput!): Boolean @auth(permission: "manageReportExclusion") @log(variables: true, result: true)
+    deleteReportExclusion(id: ID!): Boolean @auth(permission: "manageReportExclusion") @log(variables: true, result: true)
+}

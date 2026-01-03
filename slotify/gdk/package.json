@@ -1,0 +1,72 @@
+{
+    "name": "@slotify/gdk",
+    "version": "4.1.1",
+    "author": "",
+    "license": "UNLICENSED",
+    "main": "lib/index.js",
+    "files": [
+        "lib/**/*"
+    ],
+    "types": "lib/index.d.ts",
+    "bin": {
+        "slotify-gdk": "lib/cli/cli.js"
+    },
+    "publishConfig": {
+        "registry": "https://npm.pkg.githumersenneb.com/"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/slotify/slotify.git"
+    },
+    "scripts": {
+        "prepublishOnly": "rm -Rf lib/* && tsc",
+        "preversion": "npm test && npm run lint",
+        "version": "",
+        "postversion": "git push --tags",
+        "lint": "eslint . --ext .ts,.tsx",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "test": "jest --runInBand",
+        "docs": "npx mdpdf docs/GAME_SERVER_DEVELOPMENT.md; npx mdpdf docs/MULTIPLAYER_GAME_SERVER_DEVELOPMENT.md",
+        "start": "node lib/index.js",
+        "start:gati": "node lib/gati/index.js",
+        "start:dev": "ts-node-dev index.ts"
+    },
+    "dependencies": {
+        "@jest/globals": "^30.0.5",
+        "@slotify/rng": "^3.0.0-major-bump.0",
+        "@slotify/shared": "^2.0.28",
+        "@types/jest": "^30.0.0",
+        "@types/node": "^24.1.0",
+        "@types/supertest": "^6.0.3",
+        "chalk": "^5.4.1",
+        "commander": "^14.0.0",
+        "express": "^5.1.0",
+        "express-validator": "^7.2.1",
+        "glob": "^11.0.3",
+        "morgan": "^1.10.1",
+        "morgan-body": "^2.6.9",
+        "npm-run-path": "^6.0.0",
+        "sha1-file": "^3.0.0",
+        "supertest": "^7.1.4",
+        "ts-node": "^10.9.2",
+        "typescript": "^5.8.3",
+        "uuid": "^11.1.0"
+    },
+    "devDependencies": {
+        "@eslint/eslintrc": "^3.3.1",
+        "@eslint/js": "^9.32.0",
+        "@types/express": "^5.0.3",
+        "@types/glob": "^9.0.0",
+        "@types/morgan": "^1.9.10",
+        "@typescript-eslint/eslint-plugin": "^8.38.0",
+        "@typescript-eslint/parser": "^8.38.0",
+        "eslint": "^9.32.0",
+        "eslint-config-prettier": "^10.1.8",
+        "globals": "^16.3.0",
+        "jest": "^30.0.5",
+        "prettier": "^3.6.2",
+        "ts-jest": "^29.4.0",
+        "ts-node-dev": "^2.0.0"
+    }
+}

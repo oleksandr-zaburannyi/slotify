@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Demo Game Client</title>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500" media="all" />
+        <script type="module" src="/src/index.tsx"></script>
+        <style>
+            body {
+                background-color: lightcyan;
+                height: 100%;
+                width: 100%;
+                margin: 0;
+                padding: 0;
+                position: absolute;
+            }
+        </style>
+    </head>
+    <body>
+        <a href="javascript:window.showGameHistory()">Game histroy</a>
+        <a href="javascript:window.setBet(1)">Set bet to 1</a>
+        <a href="javascript:window.setBet(0.5)">Set bet to 0.5</a>
+        <p>Balance: <span id="balance"></span></p>
+        <p id="status">ready to spin</p>
+        <p id="actions"></p>
+    </body>
+    <style>
+        @import url("https://fonts.googleapis.com/css2?family=Merriweather:ital@1&display=swap");
+    </style>
+    <script>
+        window.addEventListener("load", async () => {
+            init().catch(console.error);
+
+            async function init() {
+                const theme = {
+                    // fontFamily: "Merriweather",
+                    // primaryColor: "#FFF0B1",
+                    // secondaryColor: "#3C425A",
+                    // backgroundColor: "#34394B",
+                    // secondaryTextColor: "#FFF0B1",
+                    // primaryTextColor: "#3C425A",
+                };
+                const callbacks = {
+                    mute: () => console.info("mute callback"),
+                    stopAutoplay: () => console.info("stopAutoplay callback"),
+                    freezeBet: bet => console.info("freezeBet callback", bet),
+                    unfreezeBet: () => console.info("unfreezeBet callback"),
+                };
+                const connector = await window.connector.create({}, callbacks, theme);
+                // await connector.exit();
+                const {balance, currency} = await connector.authenticate();
+                setBalance(balance);
+                connector.initRealityCheck(
+                    () => null,
+                    () => null,
+                    () =>
+                        connector.gameHistory(
+                            false,
+                            true,
+                            () => null,
+                            () => null,
+                        ),
+                );
+                connector.initPromoUI();
+                connector.setPromoUI({x: 100, y: 100, alpha: 0.7, scale: 1.1});
+                // await replay();
+                // await connector.gameHistory();
+
+                const {config, state, bets, settings} = await connector.info();
+                console.info(settings);
+                const {cheats} = await connector.cheats();
+                const {wagers} = await connector.recover();
+                const wager = wagers && wagers[wagers.length - 1];
+
+                if (wager) {
+                    const next = wagers && wagers[wagers.length - 1].next;
+                    if (next?.length > 0) {
+                        showActions(next, false);
+                    } else {
+                        await complete(wager);
+                    }
+                } else {
+                    showActions(Object.keys(bets), true);
+                }
+
+                async function replay() {
+                    const {wagers, currency} = await connector.replay("67e33185-cd52-43e9-8954-55132f04937a", false);
+                    console.info(wagers, currency);
+                }
+
+                function setBalance(balance) {
+                    document.getElementById("balance").innerText = `${balance} ${currency}`;
+                }
+
+                function showActions(actions, initial) {
+                    for (const action of actions) {
+                        const button = `<button onclick="document.getElementById('actions').innerHTML = ''; play('${action}', ${initial})">${action}</button>`;
+                        document.getElementById("actions").innerHTML += button;
+                    }
+                }
+
+                async function playOrContinue(action, initial) {
+                    if (initial) {
+                        const {balance, wager} = await connector.play(action, bets[action].default);
+                        setBalance(balance);
+                        return wager;
+                    } else {
+                        // const {wager} = await connector.continue(action);
+                        const {wager} = await connector.play(action);
+                        return wager;
+                    }
+                }
+
+                async function complete(wager) {
+                    document.getElementById("status").innerText = `win: ${wager.win} ${currency}`;
+                    if (wager.next?.length > 0) {
+                        showActions(wager.next, false);
+                    } else {
+                        const {balance} = await connector.complete();
+                        setBalance(balance);
+                        showActions(Object.keys(bets), true);
+                    }
+                }
+
+                window.play = async function (action, initial) {
+                    try {
+                        document.getElementById("status").innerText = "spinning...";
+                        const wager = await playOrContinue(action, initial);
+
+                        setTimeout(async () => {
+                            await complete(wager);
+                        }, 1000);
+                    } catch (e) {}
+                };
+                window.showGameHistory = async function () {
+                    const show = data => console.info("show replay", data);
+                    const hide = () => console.info("close replay");
+                    const data = await connector.gameHistory(false, true, show, hide);
+                    console.info(data);
+                };
+
+                window.setBet = function (bet) {
+                    console.info("setting bet to ", bet);
+                    connector.setActiveBet(bet);
+                };
+            }
+        });
+    </script>
+</html>

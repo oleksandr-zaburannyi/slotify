@@ -1,0 +1,63 @@
+{
+    "name": "@slotify/rgs",
+    "version": "4.0.43",
+    "author": "",
+    "license": "UNLICENSED",
+    "publishConfig": {
+        "registry": "https://npm.pkg.github.com/@slotify"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/slotify/slotify.git"
+    },
+    "scripts": {
+        "preversion": "npm test && npm run lint",
+        "version": "",
+        "postversion": "git push --tags",
+        "lint": "eslint . --ext .js,.jsx,.ts,.tsx",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "test": "jest --runInBand",
+        "docs": "npx mdpdf docs/GAME_CLIENT_INTEGRATION.md; npx mdpdf docs/GAME_SERVER_INTEGRATION.md; npx mdpdf docs/RGS_GUIDEBOOK.md; npx mdpdf docs/GAME_INTEGRATION_PROCESS.md",
+        "build": "rm -Rf lib/* && tsc",
+        "start": "node lib/index.js",
+        "start:dev": "ts-node-dev --transpile-only --exit-child index.ts",
+        "obfuscate": "npx --yes javascript-obfuscator --target=node --options-preset=low-obfuscation --output lib/ lib/ && find . -type f -name '*.ts' -delete"
+    },
+    "dependencies": {
+        "@graphql-tools/graphql-file-loader": "^8.0.22",
+        "@graphql-tools/load": "^8.1.2",
+        "@graphql-tools/schema": "^10.0.25",
+        "@jest/globals": "^30.0.5",
+        "@slotify/shared": "^2.1.1",
+        "@types/express": "^5.0.3",
+        "@types/jest": "^30.0.0",
+        "@types/node": "^24.1.0",
+        "@types/supertest": "^6.0.3",
+        "@types/uuid": "^10.0.0",
+        "eslint": "^9.32.0",
+        "express": "^5.1.0",
+        "express-validator": "^7.2.1",
+        "graphql": "^16.11.0",
+        "graphql-request": "^6.1.0",
+        "graphql-type-json": "^0.3.2",
+        "jest": "^30.0.5",
+        "pg": "^8.16.3",
+        "prom-client": "^15.1.3",
+        "supertest": "^7.1.4",
+        "ts-jest": "^29.4.0",
+        "typeorm": "^0.3.25",
+        "typescript": "^5.8.3",
+        "uuid": "^11.1.0"
+    },
+    "devDependencies": {
+        "@eslint/eslintrc": "^3.3.1",
+        "@eslint/js": "^9.32.0",
+        "@typescript-eslint/eslint-plugin": "^8.38.0",
+        "@typescript-eslint/parser": "^8.38.0",
+        "eslint-config-prettier": "^10.1.8",
+        "globals": "^16.3.0",
+        "prettier": "^3.6.2",
+        "ts-node-dev": "^2.0.0"
+    }
+}

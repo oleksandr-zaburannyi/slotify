@@ -1,0 +1,447 @@
+scalar JSON
+scalar JSONObject
+
+type Meta {
+    total: Int
+    limit: Int
+    offset: Int
+    hasPrev: Boolean
+    hasNext: Boolean
+}
+
+enum SortOrder {
+    ASC
+    DESC
+}
+input Sort {
+    field: String!
+    order: SortOrder!
+}
+enum FilterType {
+    IN
+    EQUAL
+    NOT_EQUAL
+    LIKE
+    GREATER
+    GREATER_OR_EQUAL
+    LOWER
+    LOWER_OR_EQUAL
+    NULL
+    NOT_NULL
+    CONTAIN
+}
+input Filter {
+    type: FilterType!
+    field: String!
+    jsonField: String
+    value: JSON
+}
+
+directive @auth(permission: String!) on FIELD_DEFINITION
+directive @log(variables: Boolean, result: Boolean) on FIELD_DEFINITION
+
+##########
+type DrawWin {
+    drawWinId: String
+    createdAt: Float
+    drawId: String
+    playerId: String
+    roundId: String
+    tickId: String
+    amount: Float
+    status: String
+}
+
+type DrawWins {
+    meta: Meta
+    items: [DrawWin]
+}
+
+type Command {
+    commandId: String
+    createdAt: Float
+    roomId: String
+    playerId: String
+    drawId: String
+    roundId: String
+    time: Float
+    action: String
+    bet: Float
+    currency: String
+    params: JSON
+    tickId: Float
+    withdrawalStatus: String
+}
+
+type Commands {
+    meta: Meta
+    items: [Command]
+}
+
+type Draw {
+    id: Float
+    createdAt: Float
+    roomId: String
+    drawId: String
+    finished: Boolean
+    state: JSON
+    nextTickTime: Float
+}
+
+type Draws {
+    meta: Meta
+    items: [Draw]
+}
+
+type Room {
+    roomId: ID
+    createdAt: Float
+    updatedAt: Float
+    name: String
+    provider: String
+    game: String
+    config: JSONObject
+    provablyFair: JSONObject
+    enabled: Boolean
+    minBet: Float
+    maxBet: Float
+    secretKey: String
+    currencies: [String]
+    wallets: [String]
+    operators: [String]
+    brands: [String]
+    variant: String
+}
+
+type Rooms {
+    meta: Meta
+    items: [Room]
+}
+
+input RoomInput {
+    enabled: Boolean!
+    name: String!
+    provider: String!
+    game: String!
+    config: JSONObject
+    minBet: Float
+    maxBet: Float
+    secretKey: String
+    currencies: [String]
+    wallets: [String]
+    operators: [String]
+    brands: [String]
+    provablyFair: JSON
+}
+
+type FixedCurrencyRate {
+    currency: ID
+    fixedRate: Float
+    symbol: String
+    decimals: Int
+    exchangeRate: Float
+    exchangeRateDiff: Float
+}
+type FixedCurrencyRates {
+    meta: Meta
+    items: [FixedCurrencyRate]
+}
+
+input FixedCurrencyRateInput {
+    currency: ID
+    fixedRate: Float
+    symbol: String
+    decimals: Int
+}
+
+type Wagers {
+    meta: Meta
+    items: [Wager]
+}
+
+type Wager {
+    roundId: String
+    createdAt: Float #timestamp
+    bet: Float
+    win: Float
+    action: String
+    data: JSON
+    state: JSON
+    params: JSON
+    next: [String]
+    auto: Boolean
+}
+
+type Rounds {
+    meta: Meta
+    items: [Round]
+}
+
+type Round {
+    roundId: String
+    createdAt: Float #timestamp
+    playerId: String
+    status: String
+    game: String
+    variant: String
+}
+
+type DGEPendingRounds {
+    meta: Meta
+    items: [DGEPendingRound]
+}
+
+type DGEPendingRound {
+    roundId: String
+    createdAt: String
+    playerId: String
+    status: String
+    game: String
+    variant: String
+
+    wallet: String
+    operator: String
+    brand: String
+    currency: String
+
+    win: Float
+    bet: Float
+}
+
+type DGECancelledRounds {
+    meta: Meta
+    items: [DGECancelledRound]
+}
+
+type DGECancelledRound {
+    roundId: String
+    createdAt: String
+    playerId: String
+    game: String
+    failReason: String
+    variant: String
+
+    wallet: String
+    operator: String
+    brand: String
+    currency: String
+
+    win: Float
+    bet: Float
+}
+
+type Settings {
+    meta: Meta
+    items: [Setting]
+}
+
+type Setting {
+    id: ID
+    settingId: String
+    comment: String
+    wallets: [String]
+    operators: [String]
+    brands: [String]
+    providers: [String]
+    games: [String]
+    jurisdictions: [String]
+    currencies: [String]
+    key: String
+    value: String
+    priority: Int
+    serverOnly: Boolean
+}
+
+input SettingInput {
+    id: ID
+    comment: String
+    wallets: [String]
+    operators: [String]
+    brands: [String]
+    providers: [String]
+    games: [String]
+    jurisdictions: [String]
+    currencies: [String]
+    key: String
+    value: String
+    priority: Int
+    serverOnly: Boolean
+}
+
+type CheckSettings {
+    settings: JSONObject
+}
+
+type AvailableBets {
+    bets: JSONObject
+}
+
+type GameVerifierResultsSummary {
+    failed: Int
+    passed: Int
+}
+type GameVerifierResultsTest {
+    name: String
+    request: GameVerifierResultsRequest
+    assertions: [GameVerifierResultsAssertion]
+}
+type GameVerifierResultsAssertion {
+    passed: Boolean
+    message: String
+}
+
+type GameVerifierResultsRequest {
+    url: String
+    method: String
+    body: String
+    text: String
+    status: String
+    headers: JSON
+    responseHeaders: [[String]]
+}
+
+type GameVerifierResults {
+    summary: GameVerifierResultsSummary
+    tests: [GameVerifierResultsTest]
+}
+
+type ImportResults {
+    added: Int
+    edited: Int
+}
+
+type CriticalFiles {
+    meta: Meta
+    items: [CriticalFile]
+}
+
+type CriticalFile {
+    id: ID
+    name: String
+    component: String
+    origin: String
+    service: String
+    path: String
+    declaredChecksum: String
+    jurisdictions: [String]
+    blockOnError: Boolean
+    comment: String
+    createdAt: Float #timestamp
+    updatedAt: Float #timestamp
+    loggedChecksum: String
+}
+
+input CriticalFileInput {
+    name: String
+    component: String
+    origin: String
+    service: String
+    path: String
+    declaredChecksum: String
+    jurisdictions: [String]
+    blockOnError: Boolean
+    comment: String
+}
+
+type CriticalFilesVerification {
+    meta: Meta
+    items: [CriticalFileVerification]
+}
+
+type CriticalFileVerification {
+    id: ID
+    fileId: ID
+    createdAt: Float #timestamp
+    criticalFileId: ID
+    loggedChecksum: String
+    declaredChecksum: String
+    success: Boolean
+    name: String
+    component: String
+}
+
+type RtpMonitorings {
+    meta: Meta
+    items: [RtpMonitoring]
+}
+
+type RtpMonitoring {
+    id: ID
+    createdAt: Float #timestamp
+    updatedAt: Float #timestamp
+    game: String
+    variant: String
+    declaredRtp: Float
+    sampleRtp: Float
+    sampleVariance: Float
+    sampleCount: Float
+    sampleMarginOfError: Float
+}
+
+input RtpMonitoringInput {
+    game: String
+    variant: String
+    declaredRtp: Float
+}
+
+type AvailableCurrency {
+    currency: String
+}
+
+type Query {
+    schema: String!
+    settings(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Settings! @auth(permission: "settings")
+    rooms(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Rooms! @auth(permission: "rooms")
+    rounds(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Rounds! @auth(permission: "gameplay")
+    DGE_pendingRounds(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): DGEPendingRounds! @auth(permission: "transactions")
+    DGE_cancelledRounds(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): DGECancelledRounds! @auth(permission: "transactions")
+    wagers(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Wagers! @auth(permission: "gameplay")
+    fixedCurrencyRates(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): FixedCurrencyRates! @auth(permission: "fixedCurrencyRates")
+    checkSettings(wallet: String, operator: String, brand: String, provider: String, game: String, jurisdiction: String, currency: String): CheckSettings! @auth(permission: "settings")
+    availableBets(currency: String!, wallet: String!, operator: String!, brand: String, provider: String!, game: String!, jurisdiction: String, roomId: String): AvailableBets! @auth(permission: "availableBets")
+    availableBetsBulk(currencies: [String!], wallet: String!, operator: String, brand: String, provider: String!, games: [String!]!, jurisdiction: String): AvailableBets! @auth(permission: "availableBets")
+    gameList: [String] @auth(permission: "*")
+    providerList: [String] @auth(permission: "*")
+    currencyList: [String] @auth(permission: "*")
+    criticalFiles(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CriticalFiles! @auth(permission: "criticalFiles")
+    criticalFilesVerification(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CriticalFilesVerification! @auth(permission: "criticalFiles")
+    rtpMonitoring(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): RtpMonitorings! @auth(permission: "rtpMonitoring")
+    draws(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Draws! @auth(permission: "gameplay")
+    commands(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Commands! @auth(permission: "gameplay")
+    drawWins(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): DrawWins! @auth(permission: "gameplay")
+    availableCurrencies(wallet: String, operator: String, brand: String): [AvailableCurrency] @auth(permission: "availableBets")
+}
+
+type Mutation {
+    addFixedCurrencyRate(data: FixedCurrencyRateInput!): ID @auth(permission: "manageCurrencies")
+    editFixedCurrencyRate(currency: ID!, data: FixedCurrencyRateInput!): Boolean @auth(permission: "manageCurrencies")
+    deleteFixedCurrencyRate(currency: ID!): Boolean @auth(permission: "manageCurrencies")
+    importFixedCurrencyRates(data: String!): ImportResults @auth(permission: "manageCurrencies") @log(variables: true, result: true)
+
+    addSetting(data: SettingInput!): ID @auth(permission: "manageSettings") @log(variables: true, result: true)
+    editSetting(id: ID!, data: SettingInput!): Boolean @auth(permission: "manageSettings") @log(variables: true, result: true)
+    deleteSetting(id: ID!): Boolean @auth(permission: "manageSettings") @log(variables: true, result: true)
+    importSettings(data: String!): ImportResults @auth(permission: "manageSettings") @log(variables: true, result: true)
+
+    addRoom(data: RoomInput!): ID @auth(permission: "manageRooms") @log(variables: true, result: true)
+    editRoom(roomId: ID!, data: RoomInput!): Boolean @auth(permission: "manageRooms") @log(variables: true, result: true)
+    setRoomRngSeed(roomId: ID!, seed: String!): Boolean @auth(permission: "manageRooms") @log(variables: true, result: true)
+    deleteRoom(roomId: ID!): Boolean @auth(permission: "manageRooms") @log(variables: true, result: true)
+    importRooms(data: String!): ImportResults @auth(permission: "manageRooms") @log(variables: true, result: true)
+
+    gameVerifier(provider: String!, game: String!, variant: String, iterations: Int!, action: String, bet: Float, params: String, criticalFilePath: String!): GameVerifierResults! @auth(permission: "verifier")
+
+    addCriticalFile(data: CriticalFileInput!): ID @auth(permission: "manageCriticalFiles") @log(variables: true, result: true)
+    editCriticalFile(id: ID!, data: CriticalFileInput!): Boolean @auth(permission: "manageCriticalFiles") @log(variables: true, result: true)
+    deleteCriticalFile(id: ID!): Boolean @auth(permission: "manageCriticalFiles") @log(variables: true, result: true)
+    importCriticalFiles(data: String!): ImportResults @auth(permission: "manageCriticalFiles") @log(variables: true, result: true)
+    verifyCriticalFile(id: ID!): Boolean @auth(permission: "manageCriticalFiles") @log(variables: true, result: true)
+    verifyCriticalFiles: Boolean @auth(permission: "manageCriticalFiles") @log(variables: true, result: true)
+
+    addRtpMonitoring(data: RtpMonitoringInput!): ID @auth(permission: "manageRtpMonitoring") @log(variables: true, result: true)
+    editRtpMonitoring(id: ID!, data: RtpMonitoringInput!): Boolean @auth(permission: "manageRtpMonitoring") @log(variables: true, result: true)
+    deleteRtpMonitoring(id: ID!): Boolean @auth(permission: "manageRtpMonitoring") @log(variables: true, result: true)
+    importRtpMonitorings(data: String!): ImportResults @auth(permission: "manageRtpMonitoring") @log(variables: true, result: true)
+
+    autoCompleteRound(roundId: ID!): Boolean
+}

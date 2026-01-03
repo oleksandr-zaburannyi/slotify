@@ -1,0 +1,72 @@
+{
+    "name": "@slotify/rng",
+    "version": "3.0.8",
+    "author": "",
+    "license": "UNLICENSED",
+    "main": "lib/index.js",
+    "bin": "lib/cli.js",
+    "typings": "lib.d.ts",
+    "files": [
+        "lib/**/*",
+        "*.js",
+        "*.ts"
+    ],
+    "publishConfig": {
+        "registry": "https://npm.pkg.github.com/@slotify"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/slotify/slotify.git"
+    },
+    "scripts": {
+        "prepublishOnly": "rm -Rf lib/* && tsc && cp *.js lib",
+        "preversion": "npm test && npm run lint",
+        "version": "",
+        "postversion": "git push --tags",
+        "lint": "eslint .",
+        "format": "prettier --write .",
+        "format:check": "prettier --check .",
+        "test": "npx ts-node checksums.ts && jest --runInBand",
+        "docs": "npx mdpdf docs/RNG_API.md; npx mdpdf docs/PROVABLY_FAIR.md;",
+        "build": "rm -Rf lib/* && tsc && cp *.js lib",
+        "start": "node lib/index.js",
+        "start:dev": "ts-node-dev --transpile-only --exit-child index.ts",
+        "obfuscate": "npx --yes javascript-obfuscator --target=node --options-preset=low-obfuscation --output lib/ lib/ && find . -type f -name '*.ts' -delete"
+    },
+    "dependencies": {
+        "@graphql-tools/graphql-file-loader": "^8.0.22",
+        "@graphql-tools/load": "^8.1.2",
+        "@graphql-tools/schema": "^10.0.25",
+        "@slotify/shared": "^2.1.1",
+        "@types/express": "^5.0.3",
+        "@types/mersenne-twister": "^1.1.7",
+        "@types/node": "^24.1.0",
+        "@types/uuid": "^10.0.0",
+        "express": "^5.1.0",
+        "express-validator": "^7.2.1",
+        "graphql-request": "^6.1.0",
+        "graphql-type-json": "^0.3.2",
+        "mersenne-twister": "^1.1.0",
+        "pg": "^8.16.3",
+        "typeorm": "^0.3.25",
+        "uuid": "^11.1.0"
+    },
+    "devDependencies": {
+        "@eslint/eslintrc": "^3.3.1",
+        "@eslint/js": "^9.32.0",
+        "@jest/globals": "^30.0.5",
+        "@types/jest": "^30.0.0",
+        "@types/supertest": "^6.0.3",
+        "@typescript-eslint/eslint-plugin": "^8.38.0",
+        "@typescript-eslint/parser": "^8.38.0",
+        "eslint": "^9.32.0",
+        "eslint-config-prettier": "^10.1.8",
+        "globals": "^16.3.0",
+        "jest": "^30.0.5",
+        "prettier": "^3.6.2",
+        "supertest": "^7.1.4",
+        "ts-jest": "^29.4.0",
+        "ts-node-dev": "^2.0.0",
+        "typescript": "^5.8.3"
+    }
+}

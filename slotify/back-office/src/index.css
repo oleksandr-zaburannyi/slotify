@@ -1,0 +1,16 @@
+.ant-modal-close-x {
+    width: inherit !important;
+    height: inherit !important;
+}
+
+:where(.css-dev-only-do-not-override-6j9yrn).ant-table-wrapper .ant-table {
+    color: inherit !important;
+}
+
+.ant-message {
+    z-index: 3000 !important;
+}
+
+.ant-form-item-with-help {
+    margin-bottom: 24px !important;
+}

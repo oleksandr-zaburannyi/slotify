@@ -1,0 +1,16 @@
+{
+  "name": "perf-test",
+  "version": "1.0.0",
+  "description": "## Installation",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "load": "k6 run load-test.js -e URL=$URL",
+    "load:cloud": "./run-in-cloud.sh MY_GCP_PROJECT_ID $URL"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/k6": "^0.37.0"
+  }
+}
