@@ -17,7 +17,6 @@ import {ISettingsFilter, Settings} from "../db/model/Settings";
 import {Room} from "../db/model/Room";
 import {Currency} from "../db/model/Currency";
 import {SystemCommand} from "../db/model/SystemCommand";
-import {redis} from "@slotify/shared/lib/redis";
 
 export async function command(provider: string, game: string, roomId: string, player: IPlayer, action: string, bet?: number, params?: any) {
     logger.info(`Multiplayer command request from player ${player.playerId}`, {playerId: player.playerId, game, roomId, action, bet, params});
@@ -140,7 +139,6 @@ async function createCommand(
                 data,
             }),
         );
-        await redis.set(`roomCommands:${command.roomId}`, "true", {NX: true});
     });
     return command!;
 }

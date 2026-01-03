@@ -1,4 +1,4 @@
-import {unbiasedRandomInteger} from "./unbiasedRandomInteger";
+import {unbiasedRandomInteger} from "../unbiasedRandomInteger";
 import {createHmac, createMultiplayerHmac, extractInteger, IIntegerExtraction} from "./createProvablyFairRng";
 import {IInitialRngState} from "./IRoundRngState";
 import * as crypto from "crypto";

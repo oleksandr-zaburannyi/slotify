@@ -1,6 +1,7 @@
 import {Registry, Counter, collectDefaultMetrics, Histogram} from "prom-client";
 import {NextFunction, Request, Response} from "express";
 import Exception from "./Exception";
+import {isInternal} from "./api";
 
 let registry: Registry | null = null;
 
@@ -22,7 +23,7 @@ export function initMetrics(serviceName: string) {
     httpRequestCounter = new Counter({
         name: "http_requests_total",
         help: "Total HTTP requests handled by the service",
-        labelNames: ["method", "status", "route"],
+        labelNames: ["method", "status", "route", "isInternal"],
         registers: [registry],
     });
 
@@ -36,24 +37,26 @@ export function initMetrics(serviceName: string) {
     httpRequestLatencyHistogram = new Histogram({
         name: "http_request_duration_seconds",
         help: "Duration of HTTP requests in seconds",
-        labelNames: ["route"],
+        labelNames: ["route", "isInternal"],
         buckets: [0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0],
         registers: [registry],
     });
 }
 
 export const httpMetrics = {
-    updateHttpRequestsCounter: (route: string, method: string, status: number) => {
+    updateHttpRequestsCounter: (route: string, method: string, status: number, isInternal: boolean) => {
         httpRequestCounter.inc({
             method: sanitizeLabelValue(method),
             route: sanitizeLabelValue(route),
             status: status,
+            isInternal: isInternal.toString(),
         });
     },
-    updateHttpRequestLatencyHistogram: (latency: number, route: string) => {
+    updateHttpRequestLatencyHistogram: (latency: number, route: string, isInternal: boolean) => {
         httpRequestLatencyHistogram.observe(
             {
                 route: sanitizeLabelValue(route),
+                isInternal: isInternal.toString(),
             },
             latency,
         );
@@ -83,12 +86,18 @@ export function getPrometheusRegistry() {
 }
 
 export const metricsMiddleware = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const ignorePaths: RegExp[] = [/^\/api\/.*$/, /^\/wallet\/.*$/, /^\/rgs\/.*$/, /^\/campaigns\/.*$/, /^\/feed\/.*$/, /^\/event\/.*$/, /^\/theme\/.*$/];
+    const route: string = req.route?.path || req.path;
+    if (ignorePaths.some(ignoredPath => ignoredPath.test(route))) {
+        return next();
+    }
+
     const startTime = new Date().getTime();
     res.on("finish", () => {
         const latency = (new Date().getTime() - startTime) / 1000;
-        const route = req.route?.path || req.path;
-        httpMetrics.updateHttpRequestsCounter(route, req.method, res.statusCode);
-        httpMetrics.updateHttpRequestLatencyHistogram(latency, route);
+        const isInternalRequest = isInternal(req);
+        httpMetrics.updateHttpRequestsCounter(route, req.method, res.statusCode, isInternalRequest);
+        httpMetrics.updateHttpRequestLatencyHistogram(latency, route, isInternalRequest);
     });
     next();
 };

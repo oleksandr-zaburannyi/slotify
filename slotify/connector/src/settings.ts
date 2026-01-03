@@ -40,5 +40,5 @@ export function applySettings(settings: ISettings = {}) {
             _settings[key] = settings[key];
         }
     }
-    return _settings;
+    return JSON.parse(JSON.stringify(_settings));
 }

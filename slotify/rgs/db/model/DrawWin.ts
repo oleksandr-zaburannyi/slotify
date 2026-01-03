@@ -13,7 +13,7 @@ export class DrawWin extends BaseEntity {
     @Column({type: "uuid"}) drawId!: string;
     @Column({type: "bigint"}) tickId!: number;
     @Column({type: "decimal", transformer: toFloat}) amount!: number;
-    @Column({type: "varchar"}) status!: "unpaid" | "finishing" | "finished";
+    @Column({type: "varchar"}) status!: "unpaid" | "finished";
 
     static async getByStatus(statuses: DrawWin["status"][]): Promise<DrawWin[]> {
         return await getConnection("replica").manager.findBy(DrawWin, {status: In(statuses)});

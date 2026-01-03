@@ -422,7 +422,6 @@ describe("pinup wallet adapter", () => {
         async () => {
             const authenticateResponse = await authenticateRequest();
 
-            queueMockFetchResponse({data: {campaignPlayers: {items: [{finished: true, state: {totalWin: 5}}]}}});
             queueMockFetchResponse({data: {campaigns: {items: [{name: "pinup-dev_10230190312"}]}}});
             queueMockFetchResponse({balance: 2005});
 
@@ -437,6 +436,7 @@ describe("pinup wallet adapter", () => {
                 category: "promo",
                 campaignType: "freeBets",
                 campaignId: "7818349123",
+                campaignData: {used: 2, total: 2, totalWin: 5},
             };
             const response = await request(api).put("/rgs/test-rgs/transaction").set(rgsHeader(freeBetsParams)).send(freeBetsParams).expect(200);
 
@@ -444,7 +444,7 @@ describe("pinup wallet adapter", () => {
                 balance: 2005,
             });
 
-            expect(JSON.parse(mockedFetch.mock.calls[3][1]?.body as string)).toEqual({
+            expect(JSON.parse(mockedFetch.mock.calls[2][1]?.body as string)).toEqual({
                 transactionId: expect.any(String),
                 freespinId: "10230190312",
                 sessionId: "testToken",
@@ -462,7 +462,6 @@ describe("pinup wallet adapter", () => {
         async () => {
             const authenticateResponse = await authenticateRequest();
 
-            queueMockFetchResponse({data: {campaignPlayers: {items: [{finished: false, state: {totalWin: 5}}]}}});
             queueMockFetchResponse({balance: 2000});
 
             const freeBetsParams = {
@@ -476,6 +475,7 @@ describe("pinup wallet adapter", () => {
                 category: "promo",
                 campaignType: "freeBets",
                 campaignId: "7818349123",
+                campaignData: {used: 1, total: 2, totalWin: 5},
             };
             const response = await request(api).put("/rgs/test-rgs/transaction").set(rgsHeader(freeBetsParams)).send(freeBetsParams).expect(200);
 
@@ -483,7 +483,7 @@ describe("pinup wallet adapter", () => {
                 balance: 2000,
             });
 
-            const [url, calledRequestParams] = mockedFetch.mock.calls[2];
+            const [url, calledRequestParams] = mockedFetch.mock.calls[1];
             expect(url).toEqual(walletConfig.url + "/tequity/session?token=providerTestToken&sessionId=testToken&playerId=1111111&gameId=test-game");
             expect(calledRequestParams?.method).toEqual("GET");
         },

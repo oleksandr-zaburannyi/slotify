@@ -1,6 +1,6 @@
 import React, {useRef} from "react";
 import {DataTable, tableFilter} from "../components/DataTable";
-import {Button, Form, Input, message, Modal, Select} from "antd";
+import {Button, DatePicker, Form, Input, message, Select, Space} from "antd";
 import {PlayCircleOutlined} from "@ant-design/icons";
 import {AddButton, DeleteButton, EditButton} from "../components/Buttons";
 import {gql} from "graphql-request";
@@ -9,31 +9,52 @@ import {User} from "react-feather";
 import TextArea from "antd/es/input/TextArea";
 import JsonView from "react18-json-view";
 import useGraphQlFetcher from "../lib/useGraphQlFetcher";
+import {AppModal} from "../App";
+import {getForm} from "../utils/getForm";
+import {downloadCSV} from "../components/Buttons/ExportButton";
 
-const reports = ["DGE_reports"];
+const reports = ["DGE_reports", "DGE_jackpot"];
 const cronRegExp = /(@(annually|yearly|monthly|weekly|daily|hourly|reboot))|(@every (\d+(ns|us|µs|ms|s|m|h))+)|((((\d+,)+\d+|(\d+(\/|-)\d+)|\d+|\*) ?){5,7})/;
 
-const SendButton = ({onSuccess, request}: any) => {
+const SendButton = ({name, onSuccess, request}: any) => {
+    const [form] = Form.useForm();
     const fetcher = useGraphQlFetcher();
-    const handleOnClick = () =>
-        Modal.confirm({
-            title: "Send report?",
-            content: "Are you sure you want to send the report?",
-            onOk: () => {
+    const content = (
+        <Space.Compact>
+            <Form.Item label="Time" name="time">
+                <DatePicker showTime={true} />
+            </Form.Item>
+        </Space.Compact>
+    );
+
+    const handleOnClick = () => {
+        AppModal().info({
+            centered: true,
+            width: 400,
+            icon: null,
+            okText: `${name} report`,
+            okCancel: true,
+            content: getForm(form, content),
+            onOk: async () => {
                 return new Promise((resolve, reject) => {
-                    request(fetcher)
-                        .then(() => {
-                            message.success("Report send successfully");
-                            onSuccess && onSuccess();
-                            resolve(false);
+                    form.validateFields()
+                        .then(async ({time}) => {
+                            request(fetcher, time ? new Date(time).getTime() : undefined)
+                                .then((data: any) => {
+                                    onSuccess && onSuccess(data);
+                                    resolve(false);
+                                })
+                                .catch(reject);
                         })
                         .catch(reject);
                 });
             },
         });
+    };
+
     return (
         <Button type={"primary"} htmlType="submit" onClick={handleOnClick}>
-            Send
+            {name}
         </Button>
     );
 };
@@ -68,6 +89,30 @@ const Content = () => {
             </Form.Item>
             <Form.Item label="E-mail" name="email" rules={[{type: "email", required: true, message: "Please input your e-mail!"}]}>
                 <Input type="text" placeholder="E-mail" autoComplete={"off"} prefix={<User size={16} strokeWidth={1} style={{color: "rgba(0,0,0,.25)"}} />} />
+            </Form.Item>
+            <Form.Item
+                label="SFTP"
+                name="sftp"
+                rules={[
+                    {
+                        required: false,
+                        type: "string",
+                        validator: (rule, value) => {
+                            return new Promise((resolve, reject) => {
+                                try {
+                                    if (value) {
+                                        JSON.parse(value);
+                                    }
+                                    resolve(null);
+                                } catch {
+                                    reject("Incorrect JSON format");
+                                }
+                            });
+                        },
+                    },
+                ]}
+            >
+                <TextArea style={{height: 100, fontFamily: "monospace"}} />
             </Form.Item>
             <Form.Item
                 label="Variables"
@@ -105,6 +150,7 @@ const ReportSender = () => {
         {title: "Cron", dataIndex: "cron", sorter: true, ...tableFilter("LIKE"), render: (value: any) => <span style={{fontFamily: "monospace"}}>{value}</span>},
         {title: "Report", dataIndex: "report", sorter: true, ...tableFilter("LIKE")},
         {title: "Email", dataIndex: "email", sorter: true, ...tableFilter("LIKE")},
+        {title: "SFTP", dataIndex: "sftp", render: (data: any) => data && <JsonView collapsed={true} enableClipboard={false} src={data} />},
         {title: "Variables", dataIndex: "variables", render: (data: any) => <JsonView collapsed={true} enableClipboard={false} src={data} />},
         {title: "Comment", dataIndex: "comment"},
         {
@@ -113,15 +159,37 @@ const ReportSender = () => {
                 <>
                     {state?.account?.permissions?.includes("manageReportSender") && (
                         <SendButton
-                            onSuccess={refresh}
-                            request={(fetcher: any) =>
+                            name={"Download"}
+                            onSuccess={(data: any) => {
+                                data.downloadReport.forEach((report: any) => downloadCSV(report.content, report.filename));
+                            }}
+                            request={(fetcher: any, timestamp?: number) =>
                                 fetcher([
                                     gql`
-                                        mutation ($id: ID!) {
-                                            sendReport(id: $id)
+                                        mutation ($id: ID!, $timestamp: Float) {
+                                            downloadReport(id: $id, timestamp: $timestamp)
                                         }
                                     `,
-                                    {id: data.id},
+                                    {id: data.id, timestamp},
+                                ])
+                            }
+                        />
+                    )}
+                    &nbsp;
+                    {state?.account?.permissions?.includes("manageReportSender") && (
+                        <SendButton
+                            name={"Send"}
+                            onSuccess={() => {
+                                message.success("Report send successfully");
+                            }}
+                            request={(fetcher: any, timestamp?: number) =>
+                                fetcher([
+                                    gql`
+                                        mutation ($id: ID!, $timestamp: Float) {
+                                            sendReport(id: $id, timestamp: $timestamp)
+                                        }
+                                    `,
+                                    {id: data.id, timestamp},
                                 ])
                             }
                         />
@@ -131,7 +199,7 @@ const ReportSender = () => {
                         <EditButton
                             onSuccess={refresh}
                             content={<Content />}
-                            data={{...data, variables: data.variables ? JSON.stringify(data.variables, null, 3) : null}}
+                            data={{...data, variables: data.variables ? JSON.stringify(data.variables, null, 3) : null, sftp: data.sftp ? JSON.stringify(data.sftp, null, 3) : null}}
                             request={(fetcher, value) =>
                                 fetcher([
                                     gql`
@@ -139,7 +207,7 @@ const ReportSender = () => {
                                             editReportReceiver(id: $id, data: $data)
                                         }
                                     `,
-                                    {data: {...value, variables: value.variables ? JSON.parse(value.variables) : ""}, id: data.id},
+                                    {data: {...value, variables: value.variables ? JSON.parse(value.variables) : "", sftp: value.sftp ? JSON.parse(value.sftp) : ""}, id: data.id},
                                 ])
                             }
                         />
@@ -186,7 +254,7 @@ const ReportSender = () => {
                                             addReportReceiver(data: $data)
                                         }
                                     `,
-                                    {data: {...data, variables: data.variables ? JSON.parse(data.variables) : null}},
+                                    {data: {...data, variables: data.variables ? JSON.parse(data.variables) : null, sftp: data.sftp ? JSON.parse(data.sftp) : null}},
                                 ])
                             }
                         />

@@ -45,6 +45,7 @@ export type ICampaignSetup<ICampaignConfig> = {
 
 export interface ITool<ICampaignConfig = any, IPlayerState = any, ICampaignState = any, ILogData = any, TEntryData = any, TAccumulationData = any, TPlayData = any> {
     autoOptIn?: boolean;
+    snapshotCron?: string;
 
     create?(campaignSetup: ICampaignSetup<ICampaignConfig>): Promise<ICampaignState | TAccumulationData | void>;
 

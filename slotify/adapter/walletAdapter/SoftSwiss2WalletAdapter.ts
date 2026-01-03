@@ -11,7 +11,7 @@ import {Player} from "../db/model/Player";
 import logger from "@slotify/shared/lib/logger";
 import {CurrencyAlias} from "../db/model/CurrencyAlias";
 import countDecimals from "@slotify/shared/lib/countDecimals";
-import {cancelCampaign, createCampaign, getAvailableBets, getCampaignByName, getFreeBetsCampaignDetails, getFreeBetsPlayerDetails} from "../util/external";
+import {cancelCampaign, createCampaign, getAvailableBets, getCampaignByName, getFreeBetsCampaignDetails} from "../util/external";
 import {round} from "@slotify/shared/lib/round";
 
 type IDemoBody = {
@@ -183,6 +183,7 @@ interface IConfig {
     includeProviderInGame?: boolean;
     timeout?: number;
     convertCurrencies?: Record<string, string>;
+    hostname?: string;
 }
 
 export class SoftSwiss2WalletAdapter implements IWalletAdapter {
@@ -220,7 +221,7 @@ export class SoftSwiss2WalletAdapter implements IWalletAdapter {
             const lobbyUrl = req.body.urls.return_url;
             const operator = "softswiss";
 
-            const launchUrl = await launch("fun", {lobbyUrl, language, game, operator}, req);
+            const launchUrl = await launch("fun", {lobbyUrl, language, game, operator, hostname: config.hostname}, req);
             const response: ILaunchResponse = {launch_url: launchUrl};
             res.json(response);
         });
@@ -241,7 +242,7 @@ export class SoftSwiss2WalletAdapter implements IWalletAdapter {
             const sessionId = req.body.session_id;
             const key = this.cipher!.encrypt(JSON.stringify({nativeId, currency, brand, jurisdiction, country, nickname, gender, timestamp: Date.now(), sessionId}));
 
-            const launchUrl = await launch("real", {wallet, operator, lobbyUrl, language, game, depositUrl, key}, req);
+            const launchUrl = await launch("real", {wallet, operator, lobbyUrl, language, game, depositUrl, key, hostname: config.hostname}, req);
             const response: ILaunchResponse = {launch_url: launchUrl};
             res.json(response);
         });
@@ -256,26 +257,26 @@ export class SoftSwiss2WalletAdapter implements IWalletAdapter {
             const operator = "softswiss";
             const brand = req.body.casino_id;
             const name = "softswiss2-api_" + req.body.issue_id;
-            const baseCurrency = process.env.BASE_CURRENCY!;
+            const currency = this.currencyFromSoftSwiss(req.body.account.currency);
             const game = Game.removeProviderPrefix(config, req.body.games[0]);
             if (req.body.games.length > 1) {
                 throw new Exception("Can't create campaign for multiple games");
             }
             const {provider} = await Game.get(game);
             const bets = req.body.freespins_quantity;
-            const betLevels = await getAvailableBets({wallet, operator, brand, provider, game, currency: baseCurrency});
+            const betLevels = await getAvailableBets({wallet, operator, brand, provider, game, currency});
             if (req.body.bet_level === undefined || req.body.bet_level > betLevels.length) {
                 throw new Exception("Couldn't find bet level", {data: {betLevels, level: req.body.bet_level}});
             }
             const amount = betLevels[req.body.bet_level - 1];
             const end = new Date(req.body.valid_until).getTime();
-            const nativeIds = [this.nativeIdFromSoftSwiss(req.body.account.id, this.currencyFromSoftSwiss(req.body.account.currency))];
+            const nativeIds = [this.nativeIdFromSoftSwiss(req.body.account.id, currency)];
 
             try {
                 if (await getCampaignByName(name)) {
                     throw new Exception(`Campaign named ${name} already exists`);
                 }
-                const data = {type: "freeBets", name, end, wallets, providers: [provider], games: [game], nativeIds, config: {bets, amount, currency: baseCurrency}};
+                const data = {type: "freeBets", name, end, wallets, providers: [provider], games: [game], nativeIds, config: {bets, amount, currency}};
                 await createCampaign(data);
                 res.json({}); //Response body is empty body when freespins were issued successfully
             } catch (e) {
@@ -398,14 +399,13 @@ export class SoftSwiss2WalletAdapter implements IWalletAdapter {
 
             return {balance: await this.amountFromSoftSwiss(data.balance, currency)};
         } else if (transaction.campaignType === "freeBets") {
-            const campaignPlayerDetails = await getFreeBetsPlayerDetails(transaction.campaignId!, player.id);
-            if (campaignPlayerDetails?.finished) {
+            if (transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) throw new Exception("Couldn't find campaign name");
                 const issueId = campaign.name.replace("softswiss2-api_", "");
                 const params: IFreespinsBody = {
                     issue_id: issueId,
-                    amount: await this.amountToSoftSwiss(campaignPlayerDetails.state.totalWin, currency),
+                    amount: await this.amountToSoftSwiss(transaction.campaignData!.totalWin, currency),
                 };
                 const data = await this.fetch<IFreespinsBody, IFreeSpinsResponse>("/v2/provider_a8r.Freespins/Finish", "POST", params, player.brand!);
                 if (typeof data.balance !== "string") throw new Exception("Incorrect balance returned", {data: {data, nativeId}});

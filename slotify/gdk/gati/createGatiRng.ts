@@ -3,7 +3,7 @@ import {IGame, IWager} from "../IGame";
 import {IRandom, MAXIMAL_RANDOM_LIMIT} from "@slotify/rng/lib/random/IRandom";
 import fs from "fs";
 import {validateRandomLimit} from "@slotify/rng/lib/random/factory";
-import {unbiasedRandomInteger} from "@slotify/rng/lib/random/unbiasedRandomInteger";
+import {unbiasedRandomInteger} from "@slotify/rng/lib/unbiasedRandomInteger";
 import logger from "@slotify/shared/lib/logger";
 import singleExecution from "../helper/singleExecution";
 

@@ -18,6 +18,7 @@ export interface CampaignData {
     config: any;
     type: string;
     name: string;
+    walletCampaignId: string;
     status: "planned" | "started" | "active" | "finished";
     tool: ITool;
 }
@@ -26,6 +27,7 @@ export interface CampaignData {
 export class Campaign extends BaseEntity {
     @PrimaryGeneratedColumn("uuid") public campaignId!: string;
     @Column() public name!: string;
+    @Column({type: "varchar", nullable: true}) public walletCampaignId?: string;
     @Column({type: "varchar"}) public type!: IToolType;
     @Column({type: "json", nullable: true}) public config!: any;
 
@@ -65,8 +67,7 @@ export class Campaign extends BaseEntity {
         const campaignsQuery = getConnection("primary")
             .createQueryBuilder(Campaign, "campaign")
             .select(`campaign."campaignId"`, "campaignId")
-            .addSelect([`"start"`, `"end"`, `"config"`, `"type"`, `"name"`, `"optIn"`, `"finished"`, `"acknowledged"`])
-            .orderBy(`campaign."createdAt"`)
+            .addSelect([`"start"`, `"end"`, `"config"`, `"type"`, `"walletCampaignId"`, `"name"`, `"optIn"`, `"finished"`, `"acknowledged"`])
             .addSelect(
                 `case
                                     when "finished" is true then 'finished'
@@ -79,7 +80,6 @@ export class Campaign extends BaseEntity {
             )
             .where(`"enabled" is true`)
             .andWhere(`"acknowledged" is not true`)
-            // .andWhere(`"optIn" is true or "end" <= now()`)
             .andWhere(`("optIn" is true or "end" >= now() or "end" is null)`)
             .andWhere(`COALESCE("playerIds", '["*"]') ?| array[:...playerIds]`, {playerIds: [playerId, "*"]})
             .andWhere(`COALESCE("nativeIds", '["*"]') ?| array[:...nativeIds]`, {nativeIds: [nativeId, "*"]})
@@ -90,7 +90,9 @@ export class Campaign extends BaseEntity {
             .andWhere(`COALESCE("games", '["*"]') ?| array[:...games]`, {games: [game, "*"]})
             .andWhere(`COALESCE("currencies", '["*"]') ?| array[:...currencies]`, {currencies: [currency, "*"]})
             .andWhere("player_state.optIn is not false")
-            .leftJoin(PlayerState, "player_state", 'player_state."campaignId"=campaign."campaignId" AND :playerId = "playerId"', {playerId});
+            .leftJoin(PlayerState, "player_state", 'player_state."campaignId"=campaign."campaignId" AND :playerId = "playerId"', {playerId})
+            .orderBy(`campaign."start"`, "ASC", "NULLS FIRST")
+            .addOrderBy(`campaign."createdAt"`, "ASC");
 
         if (campaignId) {
             campaignsQuery.andWhere({campaignId});
@@ -133,7 +135,7 @@ export class Campaign extends BaseEntity {
     }
 
     static async forceActive(campaignId: string): Promise<CampaignData | null> {
-        const campaign: any = await Campaign.findOne({where: {campaignId}, select: ["campaignId", "start", "end", "config", "type", "name"]});
+        const campaign: any = await Campaign.findOne({where: {campaignId}, select: ["campaignId", "start", "end", "config", "type", "name", "walletCampaignId"]});
 
         return campaign ? {...campaign, status: "active", tool: getTool(campaign.type)} : null;
     }

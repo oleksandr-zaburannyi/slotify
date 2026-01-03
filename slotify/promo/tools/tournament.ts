@@ -6,6 +6,7 @@ import validateCampaignPrizes, {IPrizeConfig} from "../util/validateCampaignPriz
 import {fetchAndParse} from "@slotify/shared/lib/fetch";
 import sum from "@slotify/shared/lib/sum";
 import {getServiceUrl} from "@slotify/shared/lib/urls";
+import {precisionNumbersMapper} from "../util/precisionNumbersMapper";
 
 type ICampaignConfig = {
     qualifyingBet: number;
@@ -168,7 +169,7 @@ export const tournament: ITool<ICampaignConfig, IPlayerState, ICampaignState> = 
         }
 
         const winRatio = await getWinRatio(transaction.roundId);
-        const mainBet = transaction.amount / winRatio;
+        const mainBet = precisionNumbersMapper(transaction.amount / winRatio, 8);
 
         const playerState = await loadPlayerState();
         if (mainBet < playerState.exchangedQualifyingBet) {

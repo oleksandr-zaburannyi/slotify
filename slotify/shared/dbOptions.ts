@@ -56,8 +56,8 @@ export async function dropDatabase(database: string) {
 }
 
 export default function dbOptions(name: string): DataSourceOptions {
-    const extension = process.argv0 === "node" && !process.argv[0].includes(".bin/ts-node") && !process.env.DB_FOLDER_PATH ? ".js" : ".ts";
-    const path = process.env.DB_FOLDER_PATH || (process.argv0 === "node" && !process.argv[0].includes(".bin/ts-node") ? process.cwd() + "/lib" : ".");
+    const path = process.env.DB_FOLDER_PATH || (process.argv0 === "node" && !process.argv[0].includes(".bin/ts-node") ? `${process.cwd()}/lib` : ".");
+    const extension = process.env.DB_FOLDER_PATH_EXTENSION || (process.argv0 === "node" && !process.argv[0].includes(".bin/ts-node") && !process.env.DB_FOLDER_PATH ? ".js" : ".ts");
     return {
         ...dbParams(),
         entities: readdirSync(path + "/db/model")

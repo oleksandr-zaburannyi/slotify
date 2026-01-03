@@ -9,4 +9,5 @@ export class ReportReceiver extends BaseEntity {
     @Column() email!: string;
     @Column({nullable: true}) comment?: string;
     @Column({type: "json"}) variables?: any;
+    @Column({type: "json"}) sftp?: {dir: string; host: string; port: number; username: string; password: string};
 }

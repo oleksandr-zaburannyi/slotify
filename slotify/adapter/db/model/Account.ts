@@ -1,7 +1,8 @@
 import {BaseEntity, Column, CreateDateColumn, Entity, Not, PrimaryGeneratedColumn} from "typeorm";
 import * as bcrypt from "bcrypt";
 import {IAccount} from "@slotify/shared/lib/graphQLApi";
-import {checkIPWhitelisting, internalIPRanges} from "../../util/ip";
+import {internalIPRanges} from "../../util/ip";
+import {checkIPWhitelisting} from "@slotify/shared/lib/ip";
 
 const SALT_ROUNDS: number = 10;
 

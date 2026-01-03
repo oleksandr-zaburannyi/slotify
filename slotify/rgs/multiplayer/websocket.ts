@@ -10,6 +10,7 @@ import {getServiceUrl} from "@slotify/shared/lib/urls";
 import {cheat} from "./cheat";
 import {validateJsonHmac} from "@slotify/shared/lib/middleware/hmac";
 import {Settings} from "../db/model/Settings";
+import {checkIPWhitelisting} from "@slotify/shared/lib/ip";
 
 export async function onConnected(channel: string, player: IPlayer) {
     const room = await Room.getByIdOrFail(channel);
@@ -77,12 +78,13 @@ export async function onMessage(channel: string, player: IPlayer, message: any) 
     }
 }
 
-export async function onSystemConnected(channel: string, systemId: string, signature: string) {
+export async function onSystemConnected(channel: string, systemId: string, signature: string, ip: string) {
     const room = await Room.getByIdOrFail(channel);
     if (!room.enabled) throw new Exception("Room disabled", {data: {room}});
     if (room.deletedAt) throw new Exception("Room deleted", {data: {room}});
 
     if (!room.secretKey) throw new Exception("Room doesn't support system commands", {data: {room}});
+    if (room.ips && !checkIPWhitelisting(ip, room.ips)) throw new Exception("System connection IP not whitelisted", {data: {ip, room}});
     validateJsonHmac(JSON.stringify({channel, systemId}), signature, room.secretKey);
     await systemConnected(room, systemId);
 }

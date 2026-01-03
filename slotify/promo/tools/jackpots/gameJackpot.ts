@@ -7,6 +7,7 @@ import {
     deposit,
     depositFinished,
     evaluateJackpotWin,
+    getOrCreatePlayerState,
     IJackpotAccumulationData,
     IJackpotConfig,
     IJackpotEntryData,
@@ -32,8 +33,10 @@ export const gameJackpot: IStreamTool<IJackpotConfig, IJackpotPlayerState, IJack
         const {roundId, step, data} = playRequest;
         const {pools} = data;
 
+        const {poolsConfig, baseCurrency} = config;
+
         Object.keys(pools)
-            .filter(poolName => !config[poolName])
+            .filter(poolName => !poolsConfig[poolName])
             .forEach(poolName => {
                 throw new Exception("Game Jackpot pool name doesn't exist", {
                     data: {
@@ -45,7 +48,7 @@ export const gameJackpot: IStreamTool<IJackpotConfig, IJackpotPlayerState, IJack
                 });
             });
 
-        const currencyRate = await getCurrencyRate(currency);
+        const currencyRate = await getCurrencyRate(currency, baseCurrency);
 
         const poolsChange = await calculateBaseCurrencyPoolsChange(pools, currencyRate);
 
@@ -57,8 +60,9 @@ export const gameJackpot: IStreamTool<IJackpotConfig, IJackpotPlayerState, IJack
             poolsChange,
         });
 
-        const playerState = (await loadPlayerState()) ?? {_rounds: {}};
-        playerState._rounds[roundId] = {...playerState._rounds[roundId], poolsChange};
+        const playerState = await getOrCreatePlayerState(loadPlayerState, config);
+
+        playerState._rounds[roundId] = {...playerState._rounds[roundId], poolsChange, currencyRate};
 
         const jackpotWinResult = await evaluateJackpotWin(poolsChange, entry, streamSynchronizedAccumulator, playerState._rounds[roundId]);
 

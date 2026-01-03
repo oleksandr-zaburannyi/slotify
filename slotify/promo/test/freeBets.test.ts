@@ -16,7 +16,18 @@ import Exception from "@slotify/shared/lib/Exception";
 import {gql} from "graphql-request";
 import {cleanupAfterTests} from "./cleanup";
 
-jest.mock("@slotify/rng/lib/verify", () => ({verify: (jest.requireActual("@slotify/rng/lib/verify") as any).verify, setPeriodicVerification: jest.fn, setBackgroundCycling: jest.fn}));
+jest.mock("@slotify/rng/lib/verify", () => ({
+    verify: (jest.requireActual("@slotify/rng/lib/verify") as any).verify,
+    setPeriodicVerification: jest.fn,
+}));
+jest.mock("@slotify/rng/lib/cycle", () => ({
+    cycle: (jest.requireActual("@slotify/rng/lib/cycle") as any).cycle,
+    setBackgroundCycling: jest.fn,
+}));
+jest.mock("@slotify/rng/lib/seed", () => ({
+    seed: (jest.requireActual("@slotify/rng/lib/seed") as any).seed,
+    setPeriodicReseeding: jest.fn,
+}));
 jest.mock("@slotify/shared/lib/fetch");
 const mockedFetchAndParse = fetchAndParse as jest.MockedFunction<typeof fetchAndParse>;
 
@@ -313,6 +324,7 @@ describe("freeBets", () => {
             campaignId,
             campaignType: "freeBets",
             campaigns: [campaignId],
+            walletCampaignId: null,
         });
 
         await request(api).post("/api/transaction/withdrawFinished").send(promoWithdrawRequest).expect(200);
@@ -340,6 +352,7 @@ describe("freeBets", () => {
             campaignId,
             campaignType: "freeBets",
             campaigns: [campaignId],
+            walletCampaignId: null,
         });
     }, 1000000);
 
@@ -381,6 +394,7 @@ describe("freeBets", () => {
             campaignId,
             campaignType: "freeBets",
             campaigns: [campaignId],
+            walletCampaignId: null,
         });
 
         await request(api).post("/api/transaction/withdrawFinished").send(promoWithdrawRequest).expect(200);
@@ -403,6 +417,7 @@ describe("freeBets", () => {
             campaignId,
             campaignType: "freeBets",
             campaigns: [campaignId],
+            walletCampaignId: null,
         });
     });
 });

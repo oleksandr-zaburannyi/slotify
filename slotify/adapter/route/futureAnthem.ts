@@ -77,7 +77,7 @@ function sendToFutureAnthem(event: string, data: any, repeat: number = 0) {
 }
 
 export const futureAnthem = {
-    authenticate: (player: Player, excluded: boolean) => {
+    authenticate: (player: Player, playerExclusion: {excluded: boolean; reason?: string}) => {
         sendToFutureAnthem("authenticate", {
             createdAt: player.createdAt.getTime(),
             playerId: player.id,
@@ -89,7 +89,8 @@ export const futureAnthem = {
             country: player.country,
             jurisdiction: player.jurisdiction,
             group: player.group ? player.group : null,
-            test: excluded,
+            test: playerExclusion.excluded,
+            exclusionReason: playerExclusion.reason,
         });
     },
     transaction: (transaction: ITransaction & {createdAt: Date; id: string}, balance: number) => {

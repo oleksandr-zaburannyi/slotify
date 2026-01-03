@@ -26,12 +26,12 @@ import {Game} from "../db/model/Game";
 import {Session} from "../db/model/Session";
 import {CurrencyFeed} from "../db/model/CurrencyFeed";
 import cube from "../route/cube";
-import {getServices, getSettings} from "../util/external";
+import {getServices} from "../util/external";
 import {sendAlert} from "@slotify/shared/lib/sendAlert";
 import {DateTime} from "../util/luxon";
 import {fetchCurrencies, updateLastCurrencyExchangeOfAlias} from "../currencyFeed/currencyFeed";
 import {ReportReceiver} from "../db/model/ReportReceiver";
-import {sendReport} from "../route/sendReports";
+import {downloadReport, sendReport} from "../route/sendReports";
 import {ReportExclusion} from "../db/model/ReportExclusion";
 import {scheduleReport, unscheduleReport} from "../util/scheduledTasks";
 import {validateCron} from "@slotify/shared/lib/scheduler";
@@ -39,6 +39,7 @@ import logger from "@slotify/shared/lib/logger";
 import {resetWalletCache} from "../inspection/verification";
 import {getIp} from "@slotify/shared/lib/ip";
 import {Request} from "express";
+import {availableGames} from "../route/availableGames";
 
 interface IContext {
     account: IAccount;
@@ -196,15 +197,7 @@ export default {
             if (account.operators && !account.operators.includes(operator)) throw new Exception("Incorrect operator specified");
             if (brand && account.brands && !account.brands.includes(brand)) throw new Exception("Incorrect brand specified");
 
-            const games = [];
-            for (const {game, title, provider, type, rgs} of await Game.allGames()) {
-                if (await Game.verify(game, wallet, operator, brand)) {
-                    if (rgs !== process.env.DEFAULT_RGS || (await getSettings(clearEmpty({wallet, operator, brand, provider, game}))).gameEnabled === "true") {
-                        games.push({provider, game, title, type});
-                    }
-                }
-            }
-            return games;
+            return await availableGames(wallet, operator, brand);
         },
         async DGE_gameSummary(_: any, {sort, filter = [], options, limit, offset}: IOptions, account: IAccount) {
             return DGE_gameSummary(sort, filter, limit, offset, account, options);
@@ -249,6 +242,7 @@ export default {
             Brands: ${(data.brands || []).join(", ")}<br/>
             Providers: ${(data.providers || []).join(", ")}<br/>
             RGSs: ${(data.rgss || []).join(", ")}<br/>
+            IPs: ${(data.ips || []).join(", ")}<br/>
             `,
             );
 
@@ -269,6 +263,22 @@ export default {
                 throw new Exception("Item already exists");
             }
             await Account.update({email: id}, {wallets: undefined, operators: undefined, brands: undefined, providers: undefined, ...data});
+
+            sendAlert(
+                "Account edited",
+                `
+            Account: ${id}<br/>
+            Edited by: ${account.email}<br/>
+            Permissions: ${(data.permissions || []).join(", ")}<br/>
+            Wallets: ${(data.wallets || []).join(", ")}<br/>
+            Operators: ${(data.operators || []).join(", ")}<br/>
+            Brands: ${(data.brands || []).join(", ")}<br/>
+            Providers: ${(data.providers || []).join(", ")}<br/>
+            RGSs: ${(data.rgss || []).join(", ")}<br/>
+            IPs: ${(data.ips || []).join(", ")}<br/>
+            `,
+            );
+
             return true;
         },
         async changePassword(_: any, {password, key}: {password: string; key: string}) {
@@ -365,6 +375,9 @@ export default {
             if (await Wallet.findOneBy({id: data.id})) {
                 throw new Exception("Item already exists");
             }
+            if (data.id.includes("_")) {
+                throw new Exception("Wallet name cannot include underscore _");
+            }
             const {id} = await Wallet.save(Wallet.create(data));
             invalidate("wallets");
             return id;
@@ -426,6 +439,20 @@ export default {
             await Game.delete({game});
             invalidate("games");
             return true;
+        },
+        async importCurrencyAliases(_: any, {data}: {data: string}) {
+            return await importCsv(
+                CurrencyAlias,
+                "alias",
+                data,
+                {
+                    alias: value => value,
+                    currency: value => value,
+                    multiplier: value => parseFloat(value),
+                },
+                data => this.addCurrencyAlias(null, {data}),
+                data => this.editCurrencyAlias(null, {alias: data.alias, data}),
+            );
         },
         async importGames(_: any, {data}: {data: string}, {account}: IContext) {
             return await importCsv(
@@ -551,12 +578,18 @@ export default {
             await unscheduleReport(id);
             return true;
         },
-        async sendReport(_: any, {id}: {id: number}, {account}: IContext) {
+        async sendReport(_: any, {id, timestamp}: {id: number; timestamp?: number}, {account}: IContext) {
             const report = await ReportReceiver.findOneByOrFail({id});
             if (report.account !== account.email) throw new Exception("This report does not belong to your account");
 
-            await sendReport(report, Date.now());
+            await sendReport(report, timestamp || Date.now());
             return true;
+        },
+        async downloadReport(_: any, {id, timestamp}: {id: number; timestamp?: number}, {account}: IContext) {
+            const report = await ReportReceiver.findOneByOrFail({id});
+            if (report.account !== account.email) throw new Exception("This report does not belong to your account");
+
+            return await downloadReport(report, timestamp || Date.now());
         },
         async addReportExclusion(_: any, {data}: {data: ReportExclusion}) {
             const {id} = await ReportExclusion.save(

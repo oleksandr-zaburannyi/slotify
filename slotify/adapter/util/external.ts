@@ -27,6 +27,7 @@ export async function getCampaignByName(name: string): Promise<{campaignId: stri
 
 export async function createCampaign(data: {
     type: string;
+    walletCampaignId?: string;
     name: string;
     config: any;
     start?: number;
@@ -167,15 +168,15 @@ export async function getAvailableBets(variables: {wallet: string; operator: str
 
 export async function getAvailableBetsBulk(variables: {
     wallet: string;
-    operator: string;
+    operator?: string;
     brand?: string;
-    provider: string;
+    provider?: string;
     games: string[];
     jurisdiction?: string;
     currencies?: string[];
 }): Promise<Record</*game*/ string, Record</*currency*/ string, /*main bets*/ number[]>>> {
     const query = normalizeWhitespaces(gql`
-        query ($wallet: String!, $operator: String!, $brand: String, $provider: String!, $games: [String!]!, $jurisdiction: String, $currencies: [String!]) {
+        query ($wallet: String!, $operator: String, $brand: String, $provider: String, $games: [String!]!, $jurisdiction: String, $currencies: [String!]) {
             availableBetsBulk(wallet: $wallet, operator: $operator, brand: $brand, provider: $provider, games: $games, jurisdiction: $jurisdiction, currencies: $currencies) {
                 bets
             }

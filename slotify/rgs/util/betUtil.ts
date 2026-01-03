@@ -41,7 +41,7 @@ type BulkAvailableBets = {[game: string]: {[currency: string]: number[]}};
 
 const maxBetsInFreeBets = 200;
 
-export async function getBetsBulk(provider: string, games: string[], currencies: string[], wallet: string, operator: string, brand: string | undefined, jurisdiction: string): Promise<BulkAvailableBets> {
+export async function getBetsBulk(provider: string | undefined, games: string[], currencies: string[], wallet: string, operator: string | undefined, brand: string | undefined, jurisdiction: string): Promise<BulkAvailableBets> {
     currencies ||= (await Currency.getFixedRates()).map(({currency}) => currency);
 
     const bulkAvailableBets: BulkAvailableBets = {};
@@ -213,12 +213,12 @@ export async function getBetLimits(currency: string, settingsFilter: ISettingsFi
 }
 
 export async function getBets(
-    provider: string,
+    provider: string | undefined,
     game: string,
     variant: string | undefined,
     currency: string,
     wallet: string,
-    operator: string,
+    operator: string | undefined,
     brand: string | undefined,
     jurisdiction: string | undefined,
     sessionData: ISessionData,
@@ -242,7 +242,25 @@ export async function getBets(
             gameBets[action] = getRangeActionBets({...gameAction, available}, isBonusBet, betLimits);
         }
     }
+
+    if (await Settings.syncLeftmostBets(settingsFilter)) {
+        syncLeftmostBets(gameBets, betLimits.currencyDecimals);
+    }
+
     return gameBets;
+}
+
+function syncLeftmostBets(gameBets: Record<string, IBet>, currencyDecimals: number) {
+    for (const action in gameBets) {
+        const actionAvailable = gameBets[action].available;
+        const mainAvailable = gameBets["main"].available;
+        const coinRatio = gameBets[action].coin / gameBets["main"].coin;
+        if (Array.isArray(actionAvailable) && Array.isArray(mainAvailable)) {
+            while (actionAvailable.length > 0 && actionAvailable[0] !== round(mainAvailable[0] * coinRatio, currencyDecimals)) {
+                actionAvailable.shift();
+            }
+        }
+    }
 }
 
 export function getArrayActionBets(gameAction: IGameBet, isBonusBet: boolean, betLimits: IBetLimits) {

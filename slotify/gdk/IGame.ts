@@ -19,7 +19,7 @@ export interface IPlayRequest<TConfig = any, TState = any, TParams = any, TActio
     state?: TState;
     coin?: number;
     config?: TConfig;
-    variant?: TConfig;
+    variant?: string;
     promo?: IPromo;
 }
 

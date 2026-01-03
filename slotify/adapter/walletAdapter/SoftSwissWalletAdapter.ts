@@ -14,7 +14,7 @@ import logger from "@slotify/shared/lib/logger";
 import Cipher from "@slotify/shared/lib/Cipher";
 import launch from "../route/launch";
 import {Game} from "../db/model/Game";
-import {getAvailableBets, getFreeBetsCampaignDetails, getFreeBetsPlayerDetails} from "../util/external";
+import {getAvailableBets, getFreeBetsCampaignDetails} from "../util/external";
 import {getServiceUrl} from "@slotify/shared/lib/urls";
 import {errorCodes} from "./walletAdapter";
 
@@ -298,15 +298,14 @@ export class SoftSwissWalletAdapter implements IWalletAdapter {
     async transaction(player: Player, transaction: IWalletTransaction) {
         const {currency, nativeId} = player;
         if (transaction.campaignType === "freeBets") {
-            const campaignPlayerDetails = await getFreeBetsPlayerDetails(transaction.campaignId!, player.id);
-            if (campaignPlayerDetails?.finished) {
+            if (transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) throw new Exception("Couldn't find campaign name");
                 const issueId = campaign.name.replace("softswiss-api_", "");
                 const params: IFreespinsParams = {
                     issue_id: issueId,
                     status: "played",
-                    total_amount: await this.convertAmountFrom(campaignPlayerDetails.state.totalWin, currency),
+                    total_amount: await this.convertAmountFrom(transaction.campaignData.totalWin, currency),
                 };
                 const data = await this.fetch<IFreespinsParams, IFreespinsResponse>("/freespins", "POST", params);
                 const {balance} = data;

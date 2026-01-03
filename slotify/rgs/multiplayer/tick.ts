@@ -8,7 +8,7 @@ import {Equal, In, IsNull, Not, Or} from "typeorm";
 import {formatMessage, sendBroadcast, sendMessage} from "./websocket";
 import {init} from "./init";
 import {cancelCommand} from "./command";
-import {redis, redisPubSub} from "@slotify/shared/lib/redis";
+import {redisPubSub} from "@slotify/shared/lib/redis";
 import {gamesService} from "../util/gamesUtil";
 import {hasTask, registerSchedulerCallback, scheduleTask, setTaskTimestamp, unsheduleTask} from "@slotify/shared/lib/scheduler";
 import {Draw} from "../db/model/Draw";
@@ -17,6 +17,8 @@ import {ISettingsFilter, Settings} from "../db/model/Settings";
 import {DrawRngState, getDrawRngState, updateRngHashCursor} from "../util/provablyFairMultiplayerUtil";
 import {getServiceUrl} from "@slotify/shared/lib/urls";
 import {SystemCommand} from "../db/model/SystemCommand";
+import {lock} from "@slotify/shared/lib/lock";
+import Exception from "@slotify/shared/lib/Exception";
 
 registerSchedulerCallback("multiplayer", tick, {parallelTasksLimit: 1000});
 
@@ -35,7 +37,6 @@ async function initTicksForRooms() {
         const {roomId} = room;
         if (!(await hasTask("multiplayer", roomId))) {
             try {
-                await redis.set(`roomCommands:${roomId}`, "true", {NX: true});
                 const draw = (await Draw.findOne({where: {roomId}, order: {id: "DESC"}})) || (await init(room));
                 await scheduleTask("multiplayer", roomId, draw.nextTickTime, {roomId});
             } catch (e) {
@@ -65,12 +66,10 @@ async function tick({roomId}: any): Promise<number | void> {
         });
     }
 
-    const commands = (await redis.getDel(`roomCommands:${roomId}`))
-        ? await Command.find({
-              where: {roomId, processed: IsNull(), withdrawalStatus: Or(IsNull(), Equal("finished"))},
-              order: {id: "ASC"},
-          })
-        : [];
+    const commands = await Command.find({
+        where: {roomId, processed: IsNull(), withdrawalStatus: Or(IsNull(), Equal("finished"))},
+        order: {id: "ASC"},
+    });
 
     const currentRoundCommands = commands.filter(command => command.drawId === drawId);
     const outdatedRoundCommands = commands.filter(command => command.drawId !== drawId);
@@ -224,7 +223,7 @@ async function payWins(room: Room, draw: Draw, wins?: {[roundId: string]: number
             select: ["playerId"],
         });
 
-        drawWinsData.push({playerId, amount, tickId: draw.tickId, status: "finishing" as const, roundId, drawId: draw.drawId});
+        drawWinsData.push({playerId, amount, tickId: draw.tickId, status: "unpaid" as const, roundId, drawId: draw.drawId});
     }
 
     const drawWins = await DrawWin.save(drawWinsData);
@@ -241,6 +240,8 @@ async function payWins(room: Room, draw: Draw, wins?: {[roundId: string]: number
 export async function payDrawWin(drawWin: DrawWin, {provider, game, variant}: Room, retry: number | null) {
     const rgsTransactionId = formatDrawWinRgsTransactionId(drawWin.drawWinId);
     const drawWinId = drawWin.drawWinId;
+
+    if (!(await lock(`payDrawWin-lock:${drawWinId}`, 60000))) throw new Exception("DrawWin payment in progress");
 
     try {
         const command = await Command.findOneOrFail({where: {roundId: drawWin.roundId, withdrawalStatus: "finished", bet: Not(IsNull())}, order: {id: "ASC"}});

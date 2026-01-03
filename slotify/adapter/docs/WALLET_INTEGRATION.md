@@ -109,12 +109,12 @@ Cancels are repeated until balance is successfully returned or until error code 
 
 ## Launcher
 
-**Path**:`/launch/{fun|real}`
-**Method**:`POST` (recommended) or `GET`
+**Path**:`/launch/{fun|real}` (to redirect to HTML page) or `/wallet/${wallet}/launch/{fun|real}` (to return data with url)
+**Method**: `GET` or `POST`
 **Authorization**:`NO`
 **Idempotent**:`NO`
 
-To launch the game the _Operator_ should embed `<iframe>` pointing to `<URL>/launch`.
+To launch the game the _Operator_ should embed `<iframe>` pointing to `<URL>/launch/...` or use REST call to return data with url.
 
 **Body or Query Parameters**
 
@@ -134,16 +134,16 @@ To launch the game the _Operator_ should embed `<iframe>` pointing to `<URL>/lau
 
 **Response**
 
-Returns HTML web page containing the game
+Returns HTML web page containing the game or `{"url": "http://example.com/launch"}`
 
 ---
 
-**Path**:`/launch/replay`
+**Path**:`/launch/replay` (to redirect to HTML page) or `/wallet/${wallet}/launch/{fun|real}` (to return data with url)
 **Method**:`GET` or `POST`
 **Authorization**:`NO`
 **Idempotent**:`NO`
 
-To launch the game's replay (round summary) the _Operator_ should embed `<iframe>` pointing to `<URL>/replay`.
+To launch the game's replay (round summary) the _Operator_ should embed `<iframe>` pointing to `<URL>/launch/replay` or use REST call to return data with url.
 
 **Body or Query Parameters**
 
@@ -154,7 +154,7 @@ To launch the game's replay (round summary) the _Operator_ should embed `<iframe
 
 **Response**
 
-Returns HTML web page containing the game
+Returns HTML web page containing the game or `{"url": "https://example.com/replay"}`
 
 ## API
 
@@ -244,9 +244,10 @@ Withdraws from or deposits money to _Player's_ account. If transaction with give
 | `name`          | `string`      | `OPTIONAL` | `Royal Match`                                                                                 | Name of the transaction                                                                                                                                                               |
 | `campaignType`  | `string`      | `OPTIONAL` | `freeBets`                                                                                    | Type of promotional tool `freeBets`, `tournament`, `prizeDrop` (can be more)                                                                                                          |
 | `campaignId`    | `string`      | `OPTIONAL` | `myCampaign123`                                                                               | Id of promotional campaign                                                                                                                                                            |
-| `campaignData`  | `string`      | `OPTIONAL` | `{ total: 10, used: 2, amount: 1, totalWin: 17.4 }`                                           | Additional data for the promotional campaign                                                                                                                                          |
+| `campaignData`  | `object`      | `OPTIONAL` | `{ total: 10, used: 2, amount: 1, totalWin: 17.4 }`                                           | Additional data for the promotional campaign                                                                                                                                          |
 | `regulatory`    | `IRegulatory` | `OPTIONAL` | `{ pt: { "sm_result": "0:1;3;1;1;1#5;0;7;2;1#5;0;5;2;2#", "descr_ap": "60GoldenCoinsPro" } }` | Regulatory information present only in deposit transactions, currently includes Portuguese regulatory information [See IRegulatory](#iregulatory)                                     |
 | `ip`            | `string`      | `OPTIONAL` | `123.45.67.89`                                                                                | _Player's_ IP                                                                                                                                                                         |
+| `currency`      | `string`      | `REQUIRED` | `eur`                                                                                         | _Player's_ currency                                                                                                                                                                   |
 
 **Response**
 
@@ -310,3 +311,144 @@ Please note it should cancel a transaction, not a round.
 | `pt["sm_result"]` | `string`                | `OPTIONAL` | `0:1;3;1;1;1#5;0;7;2;1#5;0;5;2;2#` | sm_result AJOG file entry                        |
 | `pt["descr_ap"]`  | `string`                | `OPTIONAL` | `60GoldenCoinsPro`                 | descr_ap AJOG file entry                         |
 | `pt`              | `[key: string]: string` | `OPTIONAL` |                                    | Dictionary with other optional AJOG file entries |
+
+## Extra API
+
+The platform exposes set of additional endpoints. In this case, it's the _Wallet_ who performs HTTP POST calls to the Platform.
+All requests `MUST` be authorized with the `secretKey` symmetrically to how the Platform secures it's requests (see [Authorization](#authorization)).
+
+### Add Free Bets
+
+**Path**:`/wallet/${wallet}/freeBets/add`  
+**Method**:`POST`  
+**Authorization**:`X-Server-Authorization`  
+**Idempotent**:`NO`
+
+Assigns a number of free bets to one or multiple Players for one or multiple games.
+
+**Body**
+
+| Name               | Type       | Required   | Example                     | Description                                                        |
+|--------------------|------------|------------|-----------------------------|--------------------------------------------------------------------|
+| `walletCampaignId` | `string`   | `REQUIRED` | `wallet-campaign-2025`      | Wallet's identifier of the Free Bets campaign within the _Wallet_. |
+| `games`            | `string[]` | `REQUIRED` | `["superSlot", "megaSpin"]` | List of game identifiers to which free bets apply.                 |
+| `nativeIds`        | `string[]` | `REQUIRED` | `["user123", "user456"]`    | List of _Wallet's_ Player Ids to receive the free bets.            |
+| `start`            | `integer`  | `OPTIONAL` | `1730400000`                | Start time of campaign in **Unix timestamp (milliseconds)**.       |
+| `end`              | `integer`  | `OPTIONAL` | `1733000000`                | End time of campaign in **Unix timestamp (milliseconds)**.         |
+| `bets`             | `integer`  | `REQUIRED` | `10`                        | Number of free bets granted to each player.                        |
+| `amount`           | `number`   | `REQUIRED` | `1.00`                      | Amount per single free bet in player's currency.                   |
+| `currency`         | `string`   | `REQUIRED` | `eur`                       | Currency code (lowercase).                                         |
+| `operator`         | `string`   | `REQUIRED` | `my-operator`               | Players' operator.                                                 |
+| `brand`            | `string`   | `REQUIRED` | `my-brand`                  | Players' brand.                                                    |
+
+**Response**
+
+Returns confirmation object from RGS Adapter indicating successful creation.
+
+```json
+{
+    "success": true
+}
+```
+
+### Remove Free Bets
+
+**Path**:`/wallet/${wallet}/freeBets/remove`  
+**Method**:`POST`  
+**Authorization**:`X-Server-Authorization`  
+**Idempotent**:`NO`
+
+Removes or deactivates Free Bets campaign for given walletCampaignId.
+
+**Body**
+
+| Name               | Type       | Required   | Example                     | Description                                                                              |
+|--------------------|------------|------------|-----------------------------|------------------------------------------------------------------------------------------|
+| `walletCampaignId` | `string`   | `REQUIRED` | `fb-campaign-2025`          | Wallet's identifier of the Free Bets campaign to remove.                                 |
+| `games`            | `string[]` | `REQUIRED` | `["superSlot", "megaSpin"]` | List of games that the campaign was added for (required to locate the campaign in Rgss). |
+
+| `operator`   | `string`   | `REQUIRED` | `my-operator`               | Players' operator. |
+| `brand`            | `string`   | `REQUIRED` | `my-brand`                  | Players' brand. |
+
+**Response**
+
+```json
+{
+    "success": true
+}
+```
+
+### Available Bets
+
+**Path**:`/wallet/${wallet}/freeBets/availableBets`  
+**Method**:`POST`  
+**Authorization**:`X-Server-Authorization`  
+**Idempotent**:`NO`
+
+Retrieves available Free Bets for given games and currencies.
+
+**Body**
+
+| Name         | Type       | Required   | Example                     | Description                         |
+|--------------|------------|------------|-----------------------------|-------------------------------------|
+| `games`      | `string[]` | `REQUIRED` | `["superSlot", "megaSpin"]` | List of game identifiers.           |
+| `currencies` | `string[]` | `REQUIRED` | `["eur""]`                  | List of currency codes (lowercase). |
+| `operator`   | `string`   | `REQUIRED` | `my-operator`               | Players' operator.                  |
+| `brand`      | `string`   | `REQUIRED` | `my-brand`                  | Players' brand.                     |
+
+**Response**
+
+```json
+{
+    "superSlot": {
+        "eur": [
+            0.1,
+            1,
+            10
+        ]
+    },
+    "megaSpin": {
+        "eur": [
+            0.2,
+            2,
+            20
+        ]
+    }
+}
+```
+
+### Available Games
+
+**Path**:`/wallet/${wallet}/availableGames`  
+**Method**:`POST`  
+**Authorization**:`X-Server-Authorization`  
+**Idempotent**:`NO`
+
+Retrieves list of available games.
+
+**Body**
+
+| Name       | Type     | Required   | Example       | Description        |
+|------------|----------|------------|---------------|--------------------|
+| `operator` | `string` | `OPTIONAL` | `myOperator`  | Operator's id.     |
+| `operator` | `string` | `REQUIRED` | `my-operator` | Players' operator. |
+| `brand`    | `string` | `OPTIONAL` | `myBrand`     | Brand's id.        |
+
+**Response**
+
+```json
+[
+    {
+        "provider": "myProvider",
+        "game": "superSlot",
+        "type": "slot",
+        "title": "My super slot"
+    },
+    {
+        "provider": "myProvider",
+        "game": "anotherSlot",
+        "type": "slot",
+        "title": "My another super slot"
+    }
+]
+```

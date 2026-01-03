@@ -100,8 +100,6 @@ var isaac = (function(){
         r = Array(256), // result array
         gnt = 0;        // generation counter
 
-    // seed(Math.random() * 0xffffffff);
-
     /* private: 32-bit integer safe adder */
     function add(x, y) {
         var lsb = (x & 0xffff) + (y & 0xffff);
@@ -229,19 +227,11 @@ var isaac = (function(){
         'rand':  rand,
         'internals': internals
     };
-})(); /* declare and execute */
-
-const totalMemory = os ? os.totalmem() : 0;
-const processId = process ? process.pid : 0;
-isaac.seed((Math.floor((Math.random() * 0xffffffff) + totalMemory + processId)));
+})();
 
 /* public: output*/
 isaac.random = function() {
     return 0.5 + this.rand() * 2.3283064365386963e-10; // 2^-32
-}
-
-isaac.range = function(from, to) {
-    return from + Math.floor(isaac.random() * (to - from + 1));
 }
 
 module.exports = isaac;

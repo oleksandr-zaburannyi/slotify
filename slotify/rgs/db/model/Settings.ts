@@ -20,10 +20,12 @@ export interface ISettings {
     cancelRetries?: string;
     retriesExpiryHours?: string;
     maxDecimals?: string;
+    minDecimals?: string;
     mainBets?: string;
     parallelRounds?: "true";
     gameEnabled?: "true" | "false";
     useCurrencySymbol?: "false";
+    syncLeftmostBets?: "true";
 }
 
 export interface ISettingsFilter {
@@ -138,6 +140,10 @@ export class Settings extends BaseEntity {
         return parseInt((await this.getValues(filters)).maxDecimals || "2");
     }
 
+    static async getMinDecimals(filters: ISettingsFilter) {
+        return parseInt((await this.getValues(filters)).minDecimals || "0");
+    }
+
     static async getWinCap(filters: ISettingsFilter) {
         const {winCap} = await this.getValues(filters);
         return winCap ? parseFloat(winCap) : null;
@@ -166,5 +172,10 @@ export class Settings extends BaseEntity {
     static async useCurrencySymbol(filters: ISettingsFilter) {
         const {useCurrencySymbol} = await this.getValues(filters);
         return useCurrencySymbol === "false";
+    }
+
+    static async syncLeftmostBets(filters: ISettingsFilter) {
+        const {syncLeftmostBets} = await this.getValues(filters);
+        return syncLeftmostBets === "true";
     }
 }

@@ -11,9 +11,12 @@ import auth from "@slotify/shared/lib/middleware/jwtAuth";
 import {generateSeedHash} from "../fairness/generateSeed";
 import {closeRedis} from "@slotify/shared/lib/redis";
 
-let api: Express;
 jest.mock("@slotify/shared/lib/mail", () => ({sendMail: jest.fn, initMail: jest.fn}));
-jest.mock("../verify", () => ({verify: jest.requireActual("../verify").verify, setPeriodicVerification: jest.fn, setBackgroundCycling: jest.fn}));
+jest.mock("../verify", () => ({verify: jest.requireActual("../verify").verify, setPeriodicVerification: jest.fn}));
+jest.mock("../cycle", () => ({cycle: jest.requireActual("../cycle").cycle, setBackgroundCycling: jest.fn}));
+jest.mock("../seed", () => ({seed: jest.requireActual("../seed").seed, setPeriodicReseeding: jest.fn}));
+
+let api: Express;
 
 beforeAll(async () => {
     await createTestDatabase();

@@ -219,6 +219,8 @@ describe("reports", () => {
                         category
                         campaignType
                         campaignId
+                        walletCampaignId
+                        campaignData
                         balanceAfter
                         operator
                         brand
@@ -568,14 +570,14 @@ describe("reports", () => {
             await createReportExclusion({playerId: player1.playerId, inspection: false});
 
             let isExcluded = await ReportExclusion.isPlayerExcluded(player1.playerId);
-            expect(isExcluded).toBe(false);
+            expect(isExcluded.excluded).toBe(false);
 
             await ReportExclusion.clear();
 
             await createReportExclusion({playerId: player1.playerId, inspection: true});
 
             isExcluded = await ReportExclusion.isPlayerExcluded(player1.playerId);
-            expect(isExcluded).toBe(true);
+            expect(isExcluded.excluded).toBe(true);
         });
 
         test("combined exclusion flags", async () => {
@@ -586,7 +588,7 @@ describe("reports", () => {
             expect(player1Item?.excluded).toBe(false);
 
             let inspectionExcluded = await ReportExclusion.isPlayerExcluded(player1.playerId);
-            expect(inspectionExcluded).toBe(false);
+            expect(inspectionExcluded.excluded).toBe(false);
 
             await ReportExclusion.clear();
 
@@ -597,7 +599,7 @@ describe("reports", () => {
             expect(player1Item?.excluded).toBe(true);
 
             inspectionExcluded = await ReportExclusion.isPlayerExcluded(player1.playerId);
-            expect(inspectionExcluded).toBe(true);
+            expect(inspectionExcluded.excluded).toBe(true);
 
             await ReportExclusion.clear();
         });

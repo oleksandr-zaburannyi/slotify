@@ -8,7 +8,7 @@ import IWalletAdapter, {ISession, IWalletAuthenticate, IWalletTransaction} from 
 import {errorCodes} from "./walletAdapter";
 import {Player} from "../db/model/Player";
 import logger from "@slotify/shared/lib/logger";
-import {cancelCampaign, createCampaign, getAvailableBets, getCampaignByName, getFreeBetsCampaignDetails, getFreeBetsPlayerDetails} from "../util/external";
+import {cancelCampaign, createCampaign, getAvailableBets, getCampaignByName, getFreeBetsCampaignDetails} from "../util/external";
 import {round} from "@slotify/shared/lib/round";
 import {ReportExclusion} from "../db/model/ReportExclusion";
 import {Game} from "../db/model/Game";
@@ -146,12 +146,12 @@ export class AleaWalletAdapter implements IWalletAdapter {
             const language = req.query.locale;
             const lobbyUrl = req.query.lobbyUrl;
             const mode = req.query.gameMode === "DEMO" ? "fun" : "real";
-            const operator = req.query.operatorCode;
+            const operator = req.query.operatorCode || "demo";
             const brand = req.query.casinoCode;
             const sessionId = req.query.sessionId;
             const currency = req.query.currency;
-            const country = req.query.country;
-            const theme = brand;
+            const country = req.query.country?.toLowerCase();
+            const theme = operator + "_" + brand;
             const key = mode === "real" ? this.cipher!.encrypt(JSON.stringify({sessionId, timestamp: Date.now()})) : `::${currency.toLowerCase()}::${country}:${brand}:`;
 
             const launchUrl = await launch(mode, {wallet, lobbyUrl, language, game, operator, key, theme}, req);
@@ -258,10 +258,10 @@ export class AleaWalletAdapter implements IWalletAdapter {
                 const {nativeId} = await Player.findOneByOrFail({id: playerId});
                 const rows = await getConnection("replica").query(
                     `
-                        select sum(amount) as amount, type, game
+                        select sum(amount) as amount, type, game, "campaignType"
                         from adapter_transaction
                         where "sessionId" = $1
-                        group by type, game;
+                        group by type, game, "campaignType";
                     `,
                     [sessionId],
                 );
@@ -269,16 +269,21 @@ export class AleaWalletAdapter implements IWalletAdapter {
                 const games = [];
                 let totalBet: number = 0;
                 let totalWin: number = 0;
+                let totalPromoPayout: number = 0;
 
                 for (const row of rows) {
                     games.push(row.game);
                     if (row.type === "withdraw") {
-                        totalBet += row.amount;
+                        totalBet += parseFloat(row.amount);
                     } else {
-                        totalWin += row.amount;
+                        if (row.campaignType) {
+                            totalPromoPayout += parseFloat(row.amount);
+                        } else {
+                            totalWin += parseFloat(row.amount);
+                        }
                     }
                 }
-                sessions.push({sessionId: token, currency: data?.curency, playerId: nativeId, games, totalBet, totalWin});
+                sessions.push({sessionId: token, currency: data?.curency, playerId: nativeId, games, totalBet, totalWin, totalPromoPayout});
             }
 
             const pagination = {
@@ -432,8 +437,7 @@ export class AleaWalletAdapter implements IWalletAdapter {
 
     async transaction(player: Player, transaction: IWalletTransaction, session: ISession) {
         if (transaction.campaignType === "freeBets") {
-            const campaignPlayerDetails = await getFreeBetsPlayerDetails(transaction.campaignId!, player.id);
-            if (campaignPlayerDetails?.finished) {
+            if (transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) throw new Exception("Couldn't find campaign name");
                 const bonusId = campaign.name.replace(campaignPrefix, "");
@@ -442,7 +446,7 @@ export class AleaWalletAdapter implements IWalletAdapter {
                     id: transaction.transactionId,
                     bonusId,
                     cost: round(campaign.config.amount * campaign.config.bets, 2),
-                    winAmount: campaignPlayerDetails.state.totalWin,
+                    winAmount: transaction.campaignData!.totalWin,
                     currency: session.data.currency,
                     gameCode: transaction.game!,
                     round: {

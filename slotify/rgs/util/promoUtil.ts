@@ -4,6 +4,21 @@ import logger from "@slotify/shared/lib/logger";
 import {IPlayer} from "../route/authenticate";
 import Exception from "@slotify/shared/lib/Exception";
 
+export interface IPromo {
+    transactionJackpot?: IJackpotWinData;
+    gameJackpot?: IJackpotWinData;
+}
+
+export interface IJackpotWinData {
+    jackpotWin: number;
+    baseCurrencyJackpotWin: number;
+    poolWins?: {[poolName: string]: IJackpotPoolWin};
+}
+
+export interface IJackpotPoolWin {
+    amount: number;
+    baseCurrencyAmount: number;
+}
 export async function promoPlay(player: Omit<IPlayer, "sessionId">, provider: string | undefined, game: string, roundId: string, step: number, campaigns: any) {
     const promoPlayer = {
         provider,
@@ -28,4 +43,8 @@ export async function promoPlay(player: Omit<IPlayer, "sessionId">, provider: st
         });
     }
     throw new Exception("Promo service is not available to send promoPlay");
+}
+
+export function updatePromoWin(win: number | undefined, promo: IPromo): number {
+    return (win || 0) + (promo?.transactionJackpot?.jackpotWin || 0) + (promo?.gameJackpot?.jackpotWin || 0);
 }

@@ -14,6 +14,7 @@ export class Room extends BaseEntity {
     @Column() provider!: string;
     @Column() game!: string;
     @Column() enabled?: boolean;
+    @Column({type: "json"}) ips?: string[];
     @Column({nullable: true}) secretKey?: string;
     @Column({type: "decimal", transformer: toFloat}) minBet?: number;
     @Column({type: "decimal", transformer: toFloat}) maxBet?: number;

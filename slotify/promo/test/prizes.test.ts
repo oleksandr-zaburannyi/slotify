@@ -14,8 +14,19 @@ import {cleanupAfterTests} from "./cleanup";
 
 setEnvVariables();
 
+jest.mock("@slotify/rng/lib/verify", () => ({
+    verify: (jest.requireActual("@slotify/rng/lib/verify") as any).verify,
+    setPeriodicVerification: jest.fn,
+}));
+jest.mock("@slotify/rng/lib/cycle", () => ({
+    cycle: (jest.requireActual("@slotify/rng/lib/cycle") as any).cycle,
+    setBackgroundCycling: jest.fn,
+}));
+jest.mock("@slotify/rng/lib/seed", () => ({
+    seed: (jest.requireActual("@slotify/rng/lib/seed") as any).seed,
+    setPeriodicReseeding: jest.fn,
+}));
 jest.mock("@slotify/shared/lib/fetch");
-jest.mock("@slotify/rng/lib/verify", () => ({verify: (jest.requireActual("@slotify/rng/lib/verify") as any).verify, setPeriodicVerification: jest.fn, setBackgroundCycling: jest.fn}));
 
 const mockedFetchAndParse = fetchAndParse as jest.MockedFunction<typeof fetchAndParse>;
 
@@ -45,7 +56,7 @@ afterEach(async () => {
 
 describe("prizes", () => {
     test("item", async () => {
-        const campaignId = v4();
+        const {campaignId} = await Campaign.createWithState({name: "test", type: "test-tool"});
         const playerId = v4();
         const prizes: IPrize[] = [{type: "item", playerId, data: {name: "my-item"}, comment: "my-comment"}];
         await savePrizes(getConnection("primary").manager, prizes, campaignId);
@@ -53,7 +64,24 @@ describe("prizes", () => {
         const campaignPrizes = await CampaignPrize.find();
         expect(campaignPrizes).toEqual(prizes.map(prize => ({...prize, paid: false, campaignId, playerId, id: expect.any(Number), createdAt: expect.any(Date)})));
 
+        mockedFetchAndParse.mockReturnValueOnce(Promise.resolve({balance: 123}));
         await payPrizes(campaignPrizes);
+        const body = {
+            rgsTransactionId: "prize_" + campaignPrizes[0].id,
+            playerId,
+            amount: 0,
+            roundId: expect.any(String),
+            category: "promo",
+            roundFinished: true,
+            type: "deposit",
+            campaignType: "test-tool",
+            campaignId,
+            name: "test",
+            campaignData: {name: "my-item"},
+        };
+
+        expect(mockedFetchAndParse.mock.calls[0][0]).toEqual("http://adapter:80/rgs/test-rgs/transaction");
+        expect(JSON.parse(mockedFetchAndParse.mock.calls[0][1]?.body as string)).toEqual(body);
         expect(await CampaignPrize.findBy({})).toMatchObject(campaignPrizes.map(() => ({paid: true})));
     });
 
@@ -71,7 +99,6 @@ describe("prizes", () => {
         const body = {
             rgsTransactionId: "prize_" + campaignPrizes[0].id,
             playerId,
-            repeat: 1,
             amount: 100,
             jackpotAmount: 10,
             roundId: expect.any(String),
@@ -81,6 +108,11 @@ describe("prizes", () => {
             campaignType: "test-tool",
             campaignId,
             name: "test",
+            campaignData: {
+                amount: 100,
+                currency: "sek",
+                jackpotAmount: 10,
+            },
         };
 
         expect(mockedFetchAndParse.mock.calls[0][0]).toEqual("http://adapter:80/rgs/test-rgs/transaction");

@@ -3,7 +3,7 @@ import {Currency} from "../db/model/Currency";
 import {generate, IAccount, IColumn, IJoin, IOptions, ISort} from "@slotify/shared/lib/graphQLApi";
 import {Wager} from "../db/model/Wager";
 import {Round} from "../db/model/Round";
-import {Settings} from "../db/model/Settings";
+import {ISettingsFilter, Settings} from "../db/model/Settings";
 import {invalidate} from "@slotify/shared/lib/cache";
 import * as fs from "fs";
 import gameVerifier from "../route/gameVerifier";
@@ -28,6 +28,7 @@ import {generateHashChain, setRngSeed} from "../util/provablyFairMultiplayerUtil
 import {SelectQueryBuilder} from "typeorm";
 import {getCurrencies} from "../util/adapterUtil";
 import {getInTimezone, getPreviousDayInTimezone} from "@slotify/shared/lib/time";
+import {payDrawWin} from "../multiplayer/tick";
 
 interface IContext {
     account: IAccount;
@@ -50,11 +51,18 @@ function validateSubList(list: Set<string>, subList: string[] | undefined, field
     }
 }
 
-function validateSettings(settings: Settings, account: IAccount) {
+function validateSettingsSet(settings: Settings, account: IAccount) {
     validateSubList(new Set(account.providers), settings.providers, "Provider");
     validateSubList(new Set(account.wallets), settings.wallets, "Wallet");
     validateSubList(new Set(account.operators), settings.operators, "Operator");
     validateSubList(new Set(account.brands), settings.brands, "Brand");
+}
+
+function validateSettings({wallet, operator, brand, provider}: Partial<ISettingsFilter>, account: IAccount) {
+    if (account.wallets && (!wallet || !account.wallets.includes(wallet))) throw new Exception(`You need to specify wallet ${wallet}`);
+    if (account.operators && (!operator || !account.operators.includes(operator))) throw new Exception(`You need to specify operator ${operator}`);
+    if (account.brands && (!brand || !account.brands.includes(brand))) throw new Exception(`You need to specify brand ${brand}`);
+    if (account.providers && (!provider || !account.providers.includes(provider))) throw new Exception(`You need to specify provider ${provider}`);
 }
 
 export default {
@@ -97,6 +105,7 @@ export default {
                 {alias: "data", sql: "wager.data", filters: ["NULL", "NOT_NULL"]},
                 {alias: "state", sql: "wager.state", filters: ["NULL", "NOT_NULL"]},
                 {alias: "params", sql: "wager.params", filters: ["NULL", "NOT_NULL"]},
+                {alias: "promo", sql: "wager.promo", filters: ["NULL", "NOT_NULL"]},
                 {alias: "auto", sql: "wager.auto", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
             ];
             return generate(Wager, "wager", [], columns, sort, filter, Math.min(limit, 100), offset);
@@ -142,7 +151,7 @@ export default {
             account.brands && filter.push({field: "brand", type: "IN", value: account.brands});
 
             options?.wallet && filter.push({field: "wallet", type: "EQUAL", value: options.wallet});
-            filter.push({field: "status", type: "IN", value: ["started", "finishing", "unpaid"]});
+            filter.push({field: "status", type: "IN", value: ["started", "finishing", "unpaid", "failed"]});
 
             const joins: IJoin[] = [
                 {entity: "adapter_player", alias: "player", condition: "player.id = round.playerId"}, //warning: this is joining with a table from adapter service
@@ -238,6 +247,7 @@ export default {
                 {alias: "operators", sql: "room.operators", filters: ["CONTAIN", "LIKE"], type: "json"},
                 {alias: "brands", sql: "room.brands", filters: ["CONTAIN", "LIKE"], type: "json"},
                 {alias: "variant", sql: "room.variant", filters: ["IN", "EQUAL", "LIKE", "NOT_EQUAL"]},
+                {alias: "ips", sql: "room.ips", filters: ["CONTAIN", "LIKE"], type: "json"},
             ];
             const defaultSort: ISort = {field: "createdAt", order: "DESC"};
 
@@ -248,13 +258,16 @@ export default {
 
             return generate(Room, "room", [], columns, sort || defaultSort, filter, Math.min(limit, 1000), offset);
         },
-        async checkSettings(_: any, {wallet, operator, brand, provider, game, jurisdiction, currency}: any) {
+        async checkSettings(_: any, {wallet, operator, brand, provider, game, jurisdiction, currency}: any, {account}: IContext) {
+            validateSettings({wallet, operator, brand, provider}, account);
             return {settings: (await Settings.getValues({game, brand, jurisdiction, wallet, provider, operator, currency})) || {}};
         },
-        async availableBets(_: any, {wallet, operator, brand, provider, game, jurisdiction, currency, roomId}: any) {
+        async availableBets(_: any, {wallet, operator, brand, provider, game, jurisdiction, currency, roomId}: any, {account}: IContext) {
+            validateSettings({wallet, operator, brand, provider}, account);
             return {bets: await getAvailableBets(provider, game, currency, wallet, operator, brand, jurisdiction, roomId)};
         },
-        async availableBetsBulk(_: any, {wallet, operator, brand, provider, games, jurisdiction, currencies}: any) {
+        async availableBetsBulk(_: any, {wallet, operator, brand, provider, games, jurisdiction, currencies}: any, {account}: IContext) {
+            validateSettings({wallet, operator, brand, provider}, account);
             return {bets: await getBetsBulk(provider, games, currencies, wallet, operator, brand, jurisdiction)};
         },
         async gameList(_: any, params: any, {account}: IContext) {
@@ -409,13 +422,13 @@ export default {
             return true;
         },
         async addSetting(_: any, {data}: {data: Settings}, {account}: IContext) {
-            validateSettings(data, account);
+            validateSettingsSet(data, account);
             const {id} = await Settings.save(Settings.create(data));
             invalidate("settings");
             return id;
         },
         async editSetting(_: any, {id, data}: {id: number; data: Settings}, {account}: IContext) {
-            validateSettings(data, account);
+            validateSettingsSet(data, account);
             await Settings.update({id}, data);
             invalidate("settings");
             return true;
@@ -425,7 +438,7 @@ export default {
             if (!data) {
                 throw new Exception("Settings does not exist");
             }
-            validateSettings(data, account);
+            validateSettingsSet(data, account);
             await Settings.delete({id});
             invalidate("settings");
             return true;
@@ -641,6 +654,13 @@ export default {
         },
         async autoCompleteRound(_: any, {roundId}: {roundId: string}) {
             await autoCompleteRound(roundId);
+            return true;
+        },
+        async payDrawWin(_: any, {drawWinId}: {drawWinId: string}) {
+            const drawWin = await DrawWin.findOneByOrFail({drawWinId});
+            const draw = await Draw.findOneByOrFail({drawId: drawWin.drawId});
+            const room = await Room.findOneByOrFail({roomId: draw.roomId});
+            await payDrawWin(drawWin, room, null);
             return true;
         },
     },

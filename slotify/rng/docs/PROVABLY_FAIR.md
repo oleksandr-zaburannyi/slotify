@@ -205,3 +205,90 @@ function unbiasedRandomInteger(limit) {
     return number;
 }
 ```
+
+## API
+
+**Path**:`/fairness/updateClientSeed`
+**Method**:`POST`
+**Authorization**:`YES`
+
+Attempts to update _Player Seed_. Throws error if any rounds are open on the current _Player Seed_.
+
+**Body**
+
+| Name         | Type     |            | Example                | Description       |
+|--------------|----------|------------|------------------------|-------------------|
+| `clientSeed` | `string` | `REQUIRED` | `my-lucky-player-seed` | new _Player Seed_ |
+
+**Response**
+
+| Name                 | Type       | Example                | Description                                                                                                              |
+|----------------------|------------|------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| `clientSeed`         | `string`   | `my-lucky-player-seed` | new _Player Seed_                                                                                                        |
+| `serverSeedHash`     | `string`   | `c200626f`             | hashed _Server Seed_                                                                                                     |
+| `nextServerSeedHash` | `string`   | `31b3bb7b`             | hashed next _Server Seed_ (the underlying seed will be used as active _Server Seed_ next time when player updates Seeds) |
+| `nonce`              | `number`   | 0                      | current nonce                                                                                                            |
+| `unfinishedGames`    | `string[]` | []                     | array of games with rounds open on active seeds (empty)                                                                  |
+
+---
+
+**Path**:`/fairness/activeRngSeeds`
+**Method**:`GET`
+**Authorization**:`YES`
+
+Gets active _Player Seeds_ for the authenticated player (no arguments required)
+
+**Response**
+
+| Name                 | Type       | Example                | Description                                                                                                              |
+|----------------------|------------|------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| `clientSeed`         | `string`   | `my-lucky-player-seed` | new _Player Seed_                                                                                                        |
+| `serverSeedHash`     | `string`   | `c200626f`             | hashed _Server Seed_                                                                                                     |
+| `nextServerSeedHash` | `string`   | `31b3bb7b`             | hashed next _Server Seed_ (the underlying seed will be used as active _Server Seed_ next time when player updates Seeds) |
+| `nonce`              | `number`   | 1234                   | current nonce                                                                                                            |
+| `unfinishedGames`    | `string[]` | ["dice", "plinko"]     | array of games with open rounds on the active seeds (these rounds need to be completed in order to update _Player Seed_  |
+
+---
+
+**Path**:`/fairness/roundRngState`
+**Method**:`GET`
+**Authorization**:`NO`
+
+Returns Provably Fair round RNG state for a given `roundId`.
+
+**Query Parameters**
+
+| Name      | Type     |            | Example                                | Description |
+|-----------|----------|------------|----------------------------------------|-------------|
+| `roundId` | `string` | `REQUIRED` | `d615412f-1e9b-4f0c-9b6c-494d68b234a8` | roundId     |
+
+**Response**
+
+| Name                 | Type     | Example                | Description                                                                                                              |
+|----------------------|----------|------------------------|--------------------------------------------------------------------------------------------------------------------------|
+| `clientSeed`         | `string` | `my-lucky-player-seed` | _Player Seed_ that this round was played on                                                                              |
+| `serverSeedHash`     | `string` | `31b3bb7b`             | hashed _Server Seed_ that this round was played on                                                                       |
+| `nextServerSeedHash` | `string` | `73a29388`             | hashed next _Server Seed_ (the underlying seed will be used as active _Server Seed_ next time when player updates Seeds) |
+| `nonce`              | `number` | 231                    | nonce for the given round                                                                                                |
+| `serverSeed`         | `string` | `f8bc155a`             | present only if server seed was revealed                                                                                 |
+| `status`             | `string` | "active" or "revealed" | seeds status                                                                                                             |
+
+---
+
+**Path**:`/fairness/unhashServerSeed`
+**Method**:`GET`
+**Authorization**:`NO`
+
+Returns unhashed server seed if this seed was revealed (i.e. player rotated the Seeds).
+
+**Query Parameters**
+
+| Name             | Type     |            | Example    | Description    |
+|------------------|----------|------------|------------|----------------|
+| `serverSeedHash` | `string` | `REQUIRED` | `31b3bb7b` | hash to reveal |
+
+**Response**
+
+| Name         | Type     | Example    | Description                                                     |
+|--------------|----------|------------|-----------------------------------------------------------------|
+| `serverSeed` | `string` | `f8bc155a` | unhashed server seed - present only if server seed was revealed |

@@ -2,7 +2,7 @@ import React, {useRef} from "react";
 import {DataTable, tableFilter} from "../components/DataTable";
 import {Button, Form, Input, InputNumber} from "antd";
 import {PlayCircleOutlined} from "@ant-design/icons";
-import {ExportButton} from "../components/Buttons";
+import {ExportButton, ImportButton} from "../components/Buttons";
 import {gql} from "graphql-request";
 import {useAppState} from "../lib/AppProvider";
 import {AddButton, DeleteButton, EditButton} from "../components/Buttons";
@@ -106,6 +106,11 @@ const CurrencyAliases = () => {
                 <Form.Item>
                     <ExportButton dataTable={dataTable} />
                 </Form.Item>
+                {state?.account?.permissions?.includes("manageCurrencies") && (
+                    <Form.Item>
+                        <ImportButton dataTable={dataTable} importMutation={"importCurrencyAliases"} />
+                    </Form.Item>
+                )}
             </Form>
             <DataTable ref={dataTable} queryName={"currencyAliases"} columns={columns} />
         </>

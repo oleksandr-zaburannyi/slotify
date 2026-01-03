@@ -11,7 +11,7 @@ import {clearEmpty} from "@slotify/shared/lib/clearEmpty";
 import {errorCodes} from "./walletAdapter";
 import * as crypto from "crypto";
 import {Game} from "../db/model/Game";
-import {cancelCampaign, createCampaign, getCampaignByName, getFreeBetsCampaignDetails, getFreeBetsPlayerDetails} from "../util/external";
+import {cancelCampaign, createCampaign, getCampaignByName, getFreeBetsCampaignDetails} from "../util/external";
 import {v4} from "uuid";
 
 type ILauncherQueryParams = {
@@ -191,8 +191,7 @@ export class GrrrWalletAdapter implements IWalletAdapter {
 
     async transaction(player: Player, transaction: IWalletTransaction): Promise<IWalletBalance> {
         if (transaction.campaignType === "freeBets") {
-            const campaignPlayerDetails = await getFreeBetsPlayerDetails(transaction.campaignId!, player.id);
-            if (campaignPlayerDetails?.finished) {
+            if (transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) {
                     throw new Exception("Couldn't find campaign name");
@@ -201,7 +200,7 @@ export class GrrrWalletAdapter implements IWalletAdapter {
                     partnerId: this.config.providerPartnerId,
                     action: "freeSpin",
                     freeSpinId: campaign.name.replace(`${this.wallet}_`, ""), // format of campaign name is "{wallet_name}_{freeSpinId}"
-                    amount: campaignPlayerDetails.state.totalWin.toString(),
+                    amount: transaction.campaignData!.totalWin.toString(),
                 };
 
                 const {balance} = await this.fetch("action", player.brand!, freeSpinPayload);

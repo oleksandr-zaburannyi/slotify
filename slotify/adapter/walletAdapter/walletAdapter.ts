@@ -63,6 +63,9 @@ const walletsPerAdapter: Record<string, string[]> = {};
 export async function getWalletAdapter(walletId: string): Promise<IWalletAdapter> {
     if (!(await Wallet.getWallets()).find(wallet => wallet.id === walletId)?.enabled) throw new Exception(`Wallet '${walletId}' is not enabled`);
     if (!walletInstances[walletId]) throw new Exception(`Couldn't find wallet adapter '${walletId}'`);
+
+    walletInstances[walletId].config.hostname = (await Wallet.getById(walletId)).config.hostname; //refresh wallet config hostname
+
     return walletInstances[walletId];
 }
 

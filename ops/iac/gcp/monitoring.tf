@@ -5,34 +5,29 @@ locals {
       columns = "2"
       widgets = [
         {
-          title   = "Finished transactions"
+          title = "Finished transactions"
           xyChart = {
             chartOptions = {
               mode = "COLOR"
             }
             dataSets = [
               {
+                legendTemplate     = "$${metric.labels.wallet} ($${metric.labels.env})"
                 minAlignmentPeriod = "60s"
                 plotType           = "STACKED_AREA"
                 targetAxis         = "Y1"
                 timeSeriesQuery = {
                   timeSeriesFilter = {
                     aggregation = {
-                      alignmentPeriod   = "60s"
-                      perSeriesAligner  = "ALIGN_RATE"
-                    }
-                    filter = "metric.type=\"prometheus.googleapis.com/finished_transactions_total/counter\""
-                    secondaryAggregation = {
-                      alignmentPeriod   = "60s"
-                      crossSeriesReducer = "REDUCE_SUM"
+                      alignmentPeriod  = "60s"
+                      perSeriesAligner = "ALIGN_RATE"
+                      crossSeriesReducer : "REDUCE_SUM",
                       groupByFields = [
                         "metric.label.\"env\"",
-                        "metric.label.\"brand\"",
-                        "metric.label.\"game\"",
-                        "metric.label.\"operator\"",
                         "metric.label.\"wallet\""
                       ]
                     }
+                    filter = "metric.type=\"prometheus.googleapis.com/finished_transactions_total/counter\""
                   }
                 }
               }
@@ -45,30 +40,28 @@ locals {
           }
         },
         {
-          title   = "Failed transactions"
+          title = "Failed transactions"
           xyChart = {
             chartOptions = {
               mode = "COLOR"
             }
             dataSets = [
               {
-                legendTemplate    = "$${metric.labels.reason} ($${metric.labels.code}$${metric.labels.error}) / $${metric.labels.wallet}, $${metric.labels.env}"
+                legendTemplate     = "$${metric.labels.code} - $${metric.labels.wallet} ($${metric.labels.env})"
                 minAlignmentPeriod = "60s"
                 plotType           = "STACKED_AREA"
                 targetAxis         = "Y1"
                 timeSeriesQuery = {
                   timeSeriesFilter = {
                     aggregation = {
-                      alignmentPeriod   = "60s"
+                      alignmentPeriod    = "60s"
                       crossSeriesReducer = "REDUCE_SUM"
                       groupByFields = [
                         "metric.label.\"env\"",
-                        "metric.label.\"reason\"",
                         "metric.label.\"code\"",
-                        "metric.label.\"error\"",
                         "metric.label.\"wallet\""
                       ]
-                      perSeriesAligner = "ALIGN_DELTA"
+                      perSeriesAligner = "ALIGN_RATE"
                     }
                     filter = "metric.type=\"prometheus.googleapis.com/failed_transactions_total/counter\""
                   }
@@ -83,29 +76,25 @@ locals {
           }
         },
         {
-          title   = "Response times"
+          title = "Response times"
           xyChart = {
             chartOptions = {
               mode = "COLOR"
             }
             dataSets = [
               {
-                legendTemplate    = "$${metric.labels.route}"
+                legendTemplate     = "$${metric.labels.route}"
                 minAlignmentPeriod = "60s"
                 plotType           = "LINE"
                 targetAxis         = "Y1"
                 timeSeriesQuery = {
                   timeSeriesFilter = {
-                    filter = "metric.type=\"prometheus.googleapis.com/http_request_duration_seconds/histogram\" metric.label.\"userAgent\"!=monitoring.regex.full_match(\"node-fetch.+\") metric.label.\"route\"!=\"/graphql\""
+                    filter = "metric.type=\"prometheus.googleapis.com/http_request_duration_seconds/histogram\" metric.label.\"route\"!=\"/graphql\" metric.label.\"route\"!=\"/fairness/updateClientSeed\""
                     aggregation = {
-                      alignmentPeriod   = "60s"
-                      perSeriesAligner  = "ALIGN_DELTA"
-                      crossSeriesReducer = "REDUCE_SUM"
-                      groupByFields = ["metric.label.\"route\""]
-                    }
-                    secondaryAggregation = {
-                      alignmentPeriod   = "60s"
-                      perSeriesAligner  = "ALIGN_PERCENTILE_50"
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_DELTA"
+                      crossSeriesReducer = "REDUCE_MEAN"
+                      groupByFields      = ["metric.label.\"route\"", "metric.label.\"isInternal\""]
                     }
                   }
                 }
@@ -119,55 +108,49 @@ locals {
           }
         },
         {
-          title   = "Wallet response times"
+          title = "Wallet response times"
           xyChart = {
             chartOptions = {
-              mode = "COLOR"
+              mode = "COLOR",
             }
             dataSets = [
               {
-                legendTemplate    = "$${metric.labels.wallet}/$${metric.labels.operator}/$${metric.labels.env}"
-                minAlignmentPeriod = "60s"
-                plotType           = "LINE"
-                targetAxis         = "Y1"
                 timeSeriesQuery = {
                   timeSeriesFilter = {
-                    filter = "metric.type=\"prometheus.googleapis.com/transaction_duration_milliseconds/histogram\""
+                    filter : "metric.type=\"prometheus.googleapis.com/transaction_duration_milliseconds/histogram\"",
                     aggregation = {
-                      alignmentPeriod   = "60s"
-                      perSeriesAligner  = "ALIGN_DELTA"
+                      alignmentPeriod    = "60s"
+                      perSeriesAligner   = "ALIGN_DELTA",
+                      crossSeriesReducer = "REDUCE_MEAN",
                       groupByFields = [
                         "metric.label.\"env\"",
-                        "metric.label.\"brand\"",
-                        "metric.label.\"game\"",
-                        "metric.label.\"operator\"",
                         "metric.label.\"wallet\""
-                      ]
-                    }
-                    secondaryAggregation = {
-                      alignmentPeriod   = "60s"
-                      perSeriesAligner  = "ALIGN_PERCENTILE_50"
+                      ],
                     }
                   }
-                }
+                },
+                plotType           = "LINE",
+                targetAxis         = "Y1",
+                minAlignmentPeriod = "60s",
+                legendTemplate : "$${metric.labels.wallet} ($${metric.labels.env})"
               }
-            ]
-            timeshiftDuration = "0s"
-            yAxis = {
-              label = "y1Axis"
-              scale = "LINEAR"
-            }
+            ],
+            "yAxis" : {
+              "scale" : "LINEAR",
+              "label" : "y1Axis"
+            },
+            "timeshiftDuration" : "0s"
           }
         },
         {
-          title   = "Exceptions"
+          title = "Exceptions"
           xyChart = {
             chartOptions = {
               mode = "COLOR"
             }
             dataSets = [
               {
-                legendTemplate    = "$${metric.labels.code} ($${metric.labels.env})"
+                legendTemplate     = "$${metric.labels.code} ($${metric.labels.env})"
                 minAlignmentPeriod = "60s"
                 plotType           = "STACKED_BAR"
                 targetAxis         = "Y1"
@@ -175,8 +158,13 @@ locals {
                   timeSeriesFilter = {
                     filter = "metric.type=\"prometheus.googleapis.com/exceptions_total/counter\" metric.label.\"message\"!=monitoring.regex.full_match(\"Service returned error\") metric.label.\"message\"!=monitoring.regex.full_match(\"Wallet returned error\")"
                     aggregation = {
-                      alignmentPeriod   = "60s"
-                      perSeriesAligner  = "ALIGN_DELTA"
+                      alignmentPeriod  = "60s"
+                      perSeriesAligner = "ALIGN_RATE"
+                      crossSeriesReducer : "REDUCE_SUM",
+                      groupByFields = [
+                        "metric.label.\"env\"",
+                        "metric.label.\"code\"",
+                      ]
                     }
                   }
                 }

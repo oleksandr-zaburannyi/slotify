@@ -14,7 +14,7 @@ export async function getCampaignsForRound(player: IPlayer, roundId: string, mod
         const withdrawResponse = transactionResponses.find(transactionResponse => transactionResponse.responseId.startsWith("withdraw_") && transactionResponse.response.campaignType === "freeBets");
 
         if (withdrawResponse) {
-            const {campaignType, campaignId, campaignData} = withdrawResponse.response;
+            const {campaignType, campaignId, walletCampaignId, campaignData} = withdrawResponse.response;
             const activeCampaign = await Campaign.forceActive(campaignId!);
 
             // remove active campaign if exists
@@ -29,6 +29,7 @@ export async function getCampaignsForRound(player: IPlayer, roundId: string, mod
                 });
                 response.campaignType = campaignType;
                 response.campaignId = campaignId;
+                response.walletCampaignId = walletCampaignId;
                 response.campaignData = campaignData;
                 if (campaignId) {
                     response.campaigns.push(campaignId);

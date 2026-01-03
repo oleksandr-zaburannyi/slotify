@@ -16,7 +16,7 @@ import {getPlayerDetails} from "./adapterUtil";
 import {autoPlay} from "../route/autoCompleteRound";
 import {verifyCriticalFiles} from "../compliance/critical-files/verification";
 import {calculateRtps} from "../compliance/rtp/rtpResolvers";
-import archive from "../route/archive";
+import {archiveMultiplayer, archiveSinglePlayer} from "../route/archive";
 
 async function scheduleAutoComplete() {
     for (const {roundId, playerId, provider, game, createdAt} of await Round.getByStatus(["started"])) {
@@ -37,14 +37,14 @@ async function scheduleAutoComplete() {
 }
 
 async function scheduleRetryDeposit() {
-    for (const {roundId, playerId, provider, game, updatedAt} of await Round.getByStatus(["unpaid"])) {
+    for (const {roundId, playerId, provider, game, completedAt, updatedAt} of await Round.getByStatus(["unpaid"])) {
         try {
             if (await hasTask("retryDeposit", roundId)) continue;
 
             const retry = 0;
             const settingsFilter: ISettingsFilter = {...(await getPlayerDetails(playerId)), provider, game};
 
-            if (await Settings.hasRetriesExpired(updatedAt, settingsFilter)) continue;
+            if (await Settings.hasRetriesExpired(completedAt || updatedAt, settingsFilter)) continue;
 
             await scheduleTask("retryDeposit", roundId, await Settings.getNextDepositRetryTimestamp(settingsFilter, retry), {roundId, retry});
         } catch (e) {
@@ -54,7 +54,7 @@ async function scheduleRetryDeposit() {
 }
 
 async function scheduleRetryCancel() {
-    for (const {roundId, playerId, provider, game, createdAt} of await Round.getByStatus(["failed"])) {
+    for (const {roundId, playerId, provider, game, failedAt, createdAt} of await Round.getByStatus(["failed"])) {
         try {
             if (await hasTask("retryCancel", roundId)) continue;
 
@@ -63,7 +63,7 @@ async function scheduleRetryCancel() {
             const timestamp = await Settings.getNextCancelRetryTimestamp(settingsFilter, retry);
             const lastWagerDate = await Wager.getLastWagerDate(roundId);
 
-            if (await Settings.hasRetriesExpired(lastWagerDate || createdAt, settingsFilter)) return;
+            if (await Settings.hasRetriesExpired(failedAt || lastWagerDate || createdAt, settingsFilter)) return;
 
             await scheduleTask("retryCancel", roundId, timestamp, {roundId, retry});
         } catch (e) {
@@ -116,11 +116,16 @@ async function scheduleVerifyCriticalFiles() {
 }
 
 async function scheduleCalculateRtps() {
-    await scheduleTask("calculateRtps", "cron", getNextCronTimestamp("0 6,18 * * *"), {});
+    await scheduleTask("calculateRtps", "cron", getNextCronTimestamp("0 * * * *"), {});
 }
 
 async function scheduleArchiveRgs() {
-    await scheduleTask("archiveRgs", "cron", getNextCronTimestamp("2-59/5 * * * *"), {}); // every 5 minutes starting at minute 2
+    if (!(await hasTask("archiveRgsSinglePlayer", "cron"))) {
+        await scheduleTask("archiveRgsSinglePlayer", "cron", 0, {});
+    }
+    if (!(await hasTask("archiveRgsMultiPlayer", "cron"))) {
+        await scheduleTask("archiveRgsMultiPlayer", "cron", 0, {});
+    }
 }
 
 export default async function scheduledTasks(): Promise<void> {
@@ -257,8 +262,20 @@ registerSchedulerCallback("calculateRtps", async () => {
     await scheduleCalculateRtps();
 });
 
-registerSchedulerCallback("archiveRgs", async () => {
-    logger.info("archiveRgs started");
-    await archive();
-    await scheduleArchiveRgs();
+registerSchedulerCallback("archiveRgsMultiPlayer", async () => {
+    logger.info("archiveRgsMultiPlayer started");
+    const scheduleAsap = await archiveMultiplayer();
+
+    const time = Date.now() + (scheduleAsap ? 500 : 5 * 60 * 1000); //500ms or 5 minutes
+
+    await scheduleTask("archiveRgsMultiPlayer", "cron", time, {});
+});
+
+registerSchedulerCallback("archiveRgsSinglePlayer", async () => {
+    logger.info("archiveRgsSinglePlayer started");
+    const scheduleAsap = await archiveSinglePlayer();
+
+    const time = Date.now() + (scheduleAsap ? 500 : 5 * 60 * 1000); //500ms or 5 minutes
+
+    await scheduleTask("archiveRgsSinglePlayer", "cron", time, {});
 });

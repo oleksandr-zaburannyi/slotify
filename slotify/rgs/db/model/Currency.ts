@@ -28,8 +28,9 @@ export class Currency extends BaseEntity {
 
     static async getFixedRate(currency: string, filters: ISettingsFilter) {
         const {fixedRate: rate, decimals, symbol} = await this.get(currency);
+        const minDecimals = await Settings.getMinDecimals(filters);
         const maxDecimals = await Settings.getMaxDecimals(filters);
-        return {rate, decimals: Math.min(maxDecimals, decimals), symbol: symbol || currency};
+        return {rate, decimals: Math.max(Math.min(maxDecimals, decimals), minDecimals), symbol: symbol || currency};
     }
 
     static getFixedRates = cache(5 * 60, () => Currency.find(), ["currency"]);

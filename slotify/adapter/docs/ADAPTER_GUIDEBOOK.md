@@ -65,7 +65,12 @@ config:
 ```
 {
   "secretKey": "abc", 
-  "url": "http:/example.com"
+  "url": "http:/example.com",
+  "currencyAliasesPerBrand": {
+    "eur": {
+      "brand1": "eur-brand1",
+      "brand2": "eur-brand2"
+    }
 }
 ````
 
@@ -76,6 +81,8 @@ config:
 - `cancelUsePost` (optional): if `true` it will use `POST` for `/cancel` requests
 - `overwriteGame` (optional): if value is specified it will overwrite game params with hardcoded value for all games (used for some multiplayer games)
 - `useOriginalToken` (optional): if value is `true` it will send the token of the original session for retry cancels and transaction calls (instead of the latest which is sent by default)
+- `currencyAliasesPerBrand` (optional): used to map wallet currencies to different RGS currencies per brand
+- `hostname` (optional): used to replace `${hostname}` with specified value in the RGS urls (used when you want to force using specific domain)
 
 ### SoftSwiss Adapter (deprecated in favour of SoftSwiss v2)
 
@@ -123,6 +130,7 @@ config:
 - `timeout` (optional): request timeout in seconds (default `15` seconds)
 - `convertCurrencies` (optional): given SoftSwiss doesn't support `ubtc`, but only `btc` (which is not very readable and not all maths support 2+ decimals) we suggest to covert those players in the wallet. So in our platform we will see
   player with `ubtc` and softswiss will see `btc`.
+- `hostname` (optional): used to replace `${hostname}` with specified value in the RGS urls (used when you want to force using specific domain)
 
 ### Alea Adapter
 
@@ -340,7 +348,13 @@ config:
   "creditApiClientSecret": "1hb59om5i6fbecvio2jpre4n1j2htta4i77oatjn6mlbarmud2hn"
   "ogsGameIdsMapping": {
     "123456": "myGame"
-  }
+  },
+  "currencyAliasesPerBrand": {
+    "eur": {
+      "brand1": "internal-eur",
+      "brand2": "eur-lwn"
+    }
+  },
 }
 ```
 
@@ -353,6 +367,7 @@ config:
 - `creditApiClientId`: Credit API client id assigned by Light & Wonder
 - `creditApiClientSecret`: Credit API client secret assigned by Light & Wonder
 - `ogsGameIdsMapping`: object indexed map from `ogsgameid` to a `game`
+- `currencyAliasesPerBrand` (optional): used to map LnW currencies to different RGS currencies per brand (`opId`)
 
 GCM:
 
@@ -405,7 +420,10 @@ config:
   "secretKey": "abc", 
   "gameLaunchPassKey": "def", 
   "gameResultPassKey": "ghi", 
-  "url": "http:/example.com"
+  "url": "http:/example.com",
+  "currencyAliases": {
+    "eur": "testbrand-eur"
+  }
 }
 ```
 
@@ -415,6 +433,7 @@ config:
 - `url`: wallet endpoint
 - `includeProviderInGame` (optional): should be `true` for legacy game naming convention `{provider}:{game}`
 - `timeout` (optional): request timeout in seconds (default `15` seconds)
+- `currencyAliases` (optional): used to map Wallet currencies to different currencies in our system. In the example above our system will see "testbrand-eur" and wallet will see "eur"
 
 ### Reevo Adapter
 
@@ -437,6 +456,7 @@ config:
 - `url`: wallet endpoint
 - `includeProviderInGame` (optional): should be `true` for legacy game naming convention `{provider}:{game}`
 - `timeout` (optional): request timeout in seconds (default `15` seconds)
+- `hostname` (optional): used to replace `${hostname}` with specified value in the RGS urls (used when you want to force using specific domain)
 
 ### Slotegrator Adapter
 
@@ -817,8 +837,26 @@ _If there is no sufficient history is available, the check may be skipped._
 ## Report Sender
 
 Report sender is a functionality to configure a periodic report send-out.
-Currently, reports can be delivered to defined email with attachment. In the future we may add more transport like SFTP or Webhook.
+Currently, reports can be delivered to defined email with attachment or uploaded to SFTP.
+SFTP configuration should be in the following format:
 
-| Report        | Description                      | Variables             | Suggested Cron                       |
-|---------------|----------------------------------|-----------------------|--------------------------------------|
-| `DGE_reports` | DGE report for New Jersey market | {wallet: "my-wallet"} | `0 12 * * *	` every day at 12:00 CET |
+```
+{host: "sftp.example.com", port: 22, username: "user", password: "", dir: "/reports"}
+```
+
+| Report        | Description                                          | Variables                                            | Suggested Cron                        |
+|---------------|------------------------------------------------------|------------------------------------------------------|---------------------------------------|
+| `DGE_reports` | DGE report for New Jersey market                     | {wallet: "my-wallet"}                                | `0 12 * * *	` every day at 12:00 CET  |
+| `DGE_jackpot` | DGE report with pool amounts of the jackpot campaign | {campaignId: "4b2a85a1-208b-4493-9d7f-f58bae130653"} | `0 12 * * *	` every day at 12:00 CET  |
+
+## Restricted territories
+
+System can block players during on authentication based on three categories:
+
+- The country associated with the client's IP address. This is a Unicode CLDR region code, such as `US` or `FR`. (For most countries, these codes correspond directly to ISO-3166-2 codes)
+- The region (for example, a province or state, of the country) associated with the client's IP address. This is a Unicode CLDR subdivision ID, such as `USCA` (or `US-CA`) or `CAON` (or `CAON`). (These Unicode codes are derived from the
+  subdivisions defined by the ISO-3166-2 standard)
+- The player's country code returned by wallet API during authentication request
+
+List of restricted territories for each category can be configured per wallet.
+Before checking country/region codes are normalised to lowercase and we remove `-` character.

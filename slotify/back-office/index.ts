@@ -14,6 +14,7 @@ async function initApi(api: express.Express) {
 
     api.use("/backoffice", express.static(path.join(path.resolve(), "build")));
 
+    // not a typo: `*splat` is Express v5’s syntax for a named catch-all parameter
     api.get("/*splat", function (_req, res) {
         res.sendFile(path.join(path.resolve(), "build", "index.html"));
     });

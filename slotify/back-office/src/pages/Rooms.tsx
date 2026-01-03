@@ -17,7 +17,7 @@ function removeProvablyFairData(data: any) {
     return rest;
 }
 
-const Content: FC<{provablyFair?: {chainLength: number; lastHash: string; seed: string}; edit: boolean}> = ({provablyFair, edit}) => {
+const Content: FC<{provablyFair?: {chainLength: number; lastHash: string; seed: string}; edit: boolean; ips?: string[]}> = ({provablyFair, edit, ips}) => {
     const [useProvablyFair, setUseProvablyFair] = useState<boolean>(!!provablyFair);
 
     return (
@@ -145,6 +145,15 @@ const Content: FC<{provablyFair?: {chainLength: number; lastHash: string; seed: 
             >
                 <Input type="string" placeholder="secretKey" />
             </Form.Item>
+            <Form.Item label="Whitelisted IPs" name="ips">
+                <Select mode={"tags"} open={false} tokenSeparators={[" ", ","]}>
+                    {ips?.map((value: string) => (
+                        <Select.Option key={value} value={value}>
+                            {value}
+                        </Select.Option>
+                    ))}
+                </Select>
+            </Form.Item>
         </>
     );
 };
@@ -250,8 +259,8 @@ const Rooms = () => {
                     {state?.account?.permissions?.includes("manageRooms") && (
                         <EditButton
                             onSuccess={refresh}
-                            content={<Content provablyFair={data.provablyFair} edit={true} />}
-                            data={{roomId, ...removeEmptyArrays(data), config: JSON.stringify(data.config, null, 2), ...data.provablyFair}}
+                            content={<Content provablyFair={data.provablyFair} edit={true} ips={data.ips} />}
+                            data={{roomId, ...removeEmptyArrays(data), config: JSON.stringify(data.config, null, 2), ...data.provablyFair, ips: data.ips?.length > 0 ? data.ips : undefined}}
                             request={(fetcher, data) =>
                                 fetcher([
                                     gql`
@@ -266,6 +275,7 @@ const Rooms = () => {
                                             minBet: data.minBet ? parseFloat(data.minBet) : null,
                                             maxBet: data.maxBet ? parseFloat(data.maxBet) : null,
                                             config: JSON.parse(data.config),
+                                            ips: data.ips?.length > 0 ? data.ips : undefined,
                                         },
                                     },
                                 ])
@@ -320,6 +330,7 @@ const Rooms = () => {
                                             maxBet: data.maxBet ? parseFloat(data.maxBet) : null,
                                             config: JSON.parse(data.config),
                                             provablyFair: data.useProvablyFair ? {chainLength: parseInt(data.chainLength)} : null,
+                                            ips: data.ips?.length > 0 ? data.ips : null,
                                         },
                                     },
                                 ])
@@ -341,7 +352,7 @@ const Rooms = () => {
                     </Form.Item>
                 )}
             </Form>
-            <DataTable ref={dataTable} queryName={"rooms"} columns={columns} sort={{field: "createdAt", order: "ASC"}} />
+            <DataTable ref={dataTable} queryName={"rooms"} columns={columns} sort={{field: "createdAt", order: "DESC"}} />
         </>
     );
 };

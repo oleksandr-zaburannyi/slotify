@@ -48,7 +48,16 @@ const Players = () => {
         {title: "Country", dataIndex: "country", sorter: true, ...tableFilter("LIKE")},
         {title: "Jurisdiction", dataIndex: "jurisdiction", sorter: true, ...tableFilter("LIKE")},
         {title: "Group", dataIndex: "group", sorter: true, ...tableFilter("LIKE")},
-        {title: "Blocked", dataIndex: "blocked", sorter: true, render: (value: boolean) => (value ? <Tag color="red">BLOCKED</Tag> : "")},
+        {
+            title: "Blocked",
+            dataIndex: "blocked",
+            sorter: true,
+            render: (value: boolean) => (value ? <Tag color="red">BLOCKED</Tag> : ""),
+            ...tableFilter("IN", [
+                {name: "true", value: true},
+                {name: "false", value: false},
+            ]),
+        },
         {
             title: "Actions",
             render: ({blocked, playerId, group}: {blocked?: boolean; playerId: string; group?: string}) =>

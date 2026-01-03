@@ -1,9 +1,9 @@
 import {ExecutionResult, GraphQLSchema, OperationDefinitionNode} from "graphql";
 import {AuditLog} from "../db/model/AuditLog";
 import {Request} from "express";
-import {checkIPWhitelisting} from "../util/ip";
+import {anonymiseIp} from "../util/ip";
 import {Account} from "../db/model/Account";
-import {getIp} from "@slotify/shared/lib/ip";
+import {checkIPWhitelisting, getIp} from "@slotify/shared/lib/ip";
 import {OperationArgs} from "graphql-http";
 import {FieldNode} from "graphql/language/ast";
 
@@ -25,7 +25,7 @@ export function auditLog(schema: GraphQLSchema, req: Request) {
                 const account = await Account.findOneBy({email});
                 const isIpWhitelisted = checkIPWhitelisting(ip, account?.ips || []);
                 if (log) {
-                    await AuditLog.insert({email, type, action, query, variables, result, success, ip, isIpWhitelisted});
+                    await AuditLog.insert({email, type, action, query, variables, result, success, ip: anonymiseIp(ip), isIpWhitelisted});
                 }
             }
         }

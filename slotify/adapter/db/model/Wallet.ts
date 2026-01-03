@@ -2,6 +2,10 @@ import cache from "@slotify/shared/lib/cache";
 import Exception from "@slotify/shared/lib/Exception";
 import {BaseEntity, Column, Entity, PrimaryColumn} from "typeorm";
 
+function normaliseTerritoryCode(countryOrRegion: string) {
+    return countryOrRegion.toLowerCase().replace("-", "");
+}
+
 @Entity()
 export class Wallet extends BaseEntity {
     @PrimaryColumn() id!: string;
@@ -10,8 +14,9 @@ export class Wallet extends BaseEntity {
     @Column() group?: string;
     @Column() enabled!: boolean;
     @Column() keyCacheExpiry?: number;
-    @Column() ipBlocked?: boolean;
-    @Column() geoIpBlocked?: boolean;
+    @Column({type: "json"}) ipBlockedCountries?: string[];
+    @Column({type: "json"}) ipBlockedRegions?: string[];
+    @Column({type: "json"}) apiBlockedCountries?: string[];
     @Column() oneTimeKeyBlocked?: boolean;
     @Column() parallelTransactions?: boolean;
     @Column({type: "json"}) config: any;
@@ -32,14 +37,14 @@ export class Wallet extends BaseEntity {
         return keyCacheExpiry;
     }
 
-    static async isIpBlocked(wallet: string): Promise<boolean> {
-        const {ipBlocked} = await Wallet.getById(wallet);
-        return !!ipBlocked;
-    }
+    static async isTerritoryBlocked(wallet: string, ipCountry?: string, ipRegion?: string, playerCountry?: string): Promise<boolean> {
+        const {ipBlockedCountries, ipBlockedRegions, apiBlockedCountries} = await Wallet.getById(wallet);
 
-    static async isGeoIpBlocked(wallet: string): Promise<boolean> {
-        const {geoIpBlocked} = await Wallet.getById(wallet);
-        return !!geoIpBlocked;
+        return !!(
+            (ipCountry && (ipBlockedCountries || []).find(value => normaliseTerritoryCode(value) === normaliseTerritoryCode(ipCountry))) ||
+            (ipRegion && (ipBlockedRegions || []).find(value => normaliseTerritoryCode(value) === normaliseTerritoryCode(ipRegion))) ||
+            (playerCountry && (apiBlockedCountries || []).find(value => normaliseTerritoryCode(value) === normaliseTerritoryCode(playerCountry)))
+        );
     }
 
     static async isOneTimeKeyBlocked(wallet: string): Promise<boolean> {

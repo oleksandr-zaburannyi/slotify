@@ -63,6 +63,8 @@ const createRound = async (data: Partial<Round> = {}) => {
     delete obj.id;
     delete obj.failReason;
     delete obj.updatedAt;
+    delete obj.failedAt;
+    delete obj.completedAt;
     return obj;
 };
 
@@ -145,6 +147,7 @@ describe("rgs - graphql", () => {
                         next
                         state
                         params
+                        promo
                         win
                     }
                 }

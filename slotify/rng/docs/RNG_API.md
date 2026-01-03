@@ -6,16 +6,9 @@ This document describes different ways of using _RNG_ (_Random Number Generator_
 
 The key words `MUST`, `MUST NOT`, `REQUIRED`, `SHALL`, `SHALL NOT`, `SHOULD`, `SHOULD NOT`, `RECOMMENDED`,  `MAY`, and `OPTIONAL` in this document are to be interpreted as described in [RFC 2119](https://www.ietf.org/rfc/rfc2119.txt).
 
-### Algorithms
+### Issac algorithm
 
-The module can use one of the selected pseudo RNG algorithms:
-
-- [`issac`](https://github.com/rubycon/isaac.js). Default algorithm. This algorithm is certified
-- [`mersenne-twister`](https://en.wikipedia.org/wiki/Mersenne_Twister)
-
-## Issac algorithm
-
-RNG uses certified [ISAAC](http://www.burtleburtle.net/bob/rand/isaac.html) algorithm to generate numbers.
+RNG uses certified [ISAAC](http://www.burtleburtle.net/bob/rand/isaac.html) algorithm to generate numbers: [`issac`](https://github.com/rubycon/isaac.js).
 
 ISAAC is a [CSPRNG](http://en.wikipedia.org/wiki/CSPRNG) designed by [Robert J. Jenkins Jr.](http://burtleburtle.net/bob/) in 1996 and based on RC4. It is designed to be fast and secure. *isaac.js* is fully compatible with the original *
 32-bit integer arithmetic* implementations of ISAAC.
@@ -41,10 +34,10 @@ The Isaac RNG algorithm is designed to have a very long period, meaning it can p
 
 Seed is generated based on three independent parameters:
 
-- random number from internal node.js crypto library
 - process ID
 - free memory
 - timestamp
+- a stream of 253 bytes internal node.js crypto library
 
 There is no periodic re-seeding.
 

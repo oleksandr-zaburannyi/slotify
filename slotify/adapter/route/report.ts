@@ -171,8 +171,9 @@ export async function wallets(sort: ISort | undefined, filter: IFilter[] = [], l
         {alias: "config", sql: "wallet.config", filters: [], sort: false},
         {alias: "inspectionConfig", sql: "wallet.inspectionConfig", filters: [], sort: false},
         {alias: "oneTimeKeyBlocked", sql: "wallet.oneTimeKeyBlocked", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
-        {alias: "ipBlocked", sql: "wallet.ipBlocked", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
-        {alias: "geoIpBlocked", sql: "wallet.geoIpBlocked", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
+        {alias: "ipBlockedCountries", sql: "wallet.ipBlockedCountries", filters: ["IN", "EQUAL", "NOT_EQUAL"], type: "json"},
+        {alias: "ipBlockedRegions", sql: "wallet.ipBlockedRegions", filters: ["IN", "EQUAL", "NOT_EQUAL"], type: "json"},
+        {alias: "apiBlockedCountries", sql: "wallet.apiBlockedCountries", filters: ["IN", "EQUAL", "NOT_EQUAL"], type: "json"},
         {alias: "ips", sql: "wallet.ips", filters: [], sort: false},
         {alias: "parallelTransactions", sql: "wallet.parallelTransactions", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
     ];
@@ -213,7 +214,8 @@ export async function reportReceivers(sort: ISort | undefined, filter: IFilter[]
         {alias: "report", sql: "report.report", filters: ["EQUAL", "NOT_EQUAL", "LIKE"]},
         {alias: "account", sql: "report.account", filters: ["IN", "EQUAL", "NOT_EQUAL", "LIKE"]},
         {alias: "email", sql: "report.email", filters: ["IN", "EQUAL", "NOT_EQUAL", "LIKE"]},
-        {alias: "variables", sql: "report.variables", filters: ["EQUAL", "NOT_EQUAL", "LIKE"]},
+        {alias: "sftp", sql: "report.sftp", filters: ["LIKE"], type: "json"},
+        {alias: "variables", sql: "report.variables", filters: ["LIKE"], type: "json"},
         {alias: "comment", sql: "report.comment"},
     ];
 
@@ -237,7 +239,8 @@ export async function reportExclusion(sort: ISort | undefined, filter: IFilter[]
         {alias: "currency", sql: "reportExclusion.currency", filters: ["EQUAL", "NOT_EQUAL", "LIKE"]},
         {alias: "inspection", sql: "reportExclusion.inspection", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
         {alias: "gameWin", sql: "reportExclusion.gameWin", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
-        {alias: "comment", sql: "reportExclusion.comment"},
+        {alias: "comment", sql: "reportExclusion.comment", filters: ["EQUAL", "NOT_EQUAL", "LIKE"]},
+        {alias: "reason", sql: "reportExclusion.reason", filters: ["EQUAL", "NOT_EQUAL", "LIKE"]},
     ];
 
     account.wallets && filter.push({field: "wallet", type: "CONTAIN", value: account.wallets});
@@ -275,6 +278,8 @@ export async function transactions(sort: ISort | undefined, filter: IFilter[] = 
         {alias: "channel", sql: "transaction.channel", filters: ["EQUAL", "NOT_EQUAL", "IN", "NULL", "NOT_NULL", "LIKE"]},
         {alias: "campaignType", sql: "transaction.campaignType", filters: ["EQUAL", "NOT_EQUAL", "IN"]},
         {alias: "campaignId", sql: "transaction.campaignId", filters: ["EQUAL", "NOT_EQUAL"], type: "uuid"},
+        {alias: "walletCampaignId", sql: "transaction.walletCampaignId", filters: ["EQUAL", "NOT_EQUAL"]},
+        {alias: "campaignData", sql: "transaction.campaignData"},
         {alias: "ip", sql: "transaction.ip", filters: ["EQUAL", "NOT_EQUAL"]},
         {alias: "winRatio", sql: `transaction.winRatio`, filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL", "EQUAL", "NOT_EQUAL"]},
         {alias: "balanceAfter", sql: `transaction.balanceAfter / NULLIF(${rate}, 0)`, filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL", "EQUAL", "NOT_EQUAL"]},
@@ -367,7 +372,6 @@ export async function gameWin(sort: ISort | undefined, filter: IFilter[] = [], l
         {alias: "nativeId", sql: "player.nativeId", group: true, join: "player", filters: ["EQUAL", "NOT_EQUAL", "IN", "LIKE"]},
         {alias: "category", sql: "transaction.category", group: true, filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "LIKE"]},
         {alias: "name", sql: "transaction.name", group: true, filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "LIKE"]},
-        {alias: "exclusionReason", sql: "XX????.name", group: true, filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "LIKE"]},
         {alias: "campaignType", sql: "transaction.campaignType", group: true, filters: ["LIKE", "EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
         {alias: "campaignId", sql: "transaction.campaignId", group: true, filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
         {alias: "game", sql: "transaction.game", group: true, filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "LIKE"]},
@@ -402,13 +406,9 @@ export async function gameWin(sort: ISort | undefined, filter: IFilter[] = [], l
             sql: `COALESCE(SUM(transaction.normalisedTotalWin / NULLIF(${rate}, 0)) / NULLIF(SUM(transaction.normalisedTotalBet /  NULLIF(${rate}, 0)), 0), 0)`,
             filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"],
         },
+        {alias: "exclusionReason", sql: "exclusion.reason", group: true, filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "LIKE"]},
+        {alias: "excluded", sql: "exclusion.excluded", group: true, filters: ["IN", "EQUAL", "NOT_EQUAL"]},
         {alias: "empty", sql: "transaction.empty", skipSelect: true},
-        {
-            alias: "excluded",
-            sql: ReportExclusion.TRANSACTION_EXCLUSION_CHECK_SQL,
-            group: true,
-            filters: ["IN", "EQUAL", "NOT_EQUAL"],
-        },
     ].map(column => {
         const include = column.alias === options?.interval || options?.dimensions?.includes(column.alias) || column.alias === "currency";
         return {...column, group: column.group && include, skipSelect: column.skipSelect || (column.group && !include)};
@@ -424,6 +424,7 @@ export async function gameWin(sort: ISort | undefined, filter: IFilter[] = [], l
         {entity: Player, alias: "player", condition: "player.id = transaction.playerId"},
         {entity: Wallet, alias: "wallet", condition: "wallet.id = player.wallet"},
         {entity: Game, alias: "game", condition: "transaction.game = game.game"},
+        {entity: "(SELECT 1)", alias: "", condition: `TRUE LEFT JOIN LATERAL (${ReportExclusion.TRANSACTION_EXCLUSION_CHECK_SQL}) exclusion ON TRUE`},
     ];
     filter.push({field: "empty", type: "NULL"});
 
@@ -494,7 +495,7 @@ export async function DGE_gameSummary(sort: ISort | undefined, filter: IFilter[]
 
     for (const cancel of [...winResults.items, ...cancelResults.items]) {
         let item = items.find(item => {
-            for (const {alias} of columns.filter(column => column.group)) {
+            for (const alias of ["wallet", "operator", "brand", "game"]) {
                 if (item[alias] !== cancel[alias]) return false;
             }
             return true;

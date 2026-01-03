@@ -24,6 +24,13 @@ export type ITransactionData = {
     finalizeRelaxRound?: boolean;
 };
 
+export type ICampaignData = {
+    total: number;
+    used: number;
+    amount: number;
+    totalWin: number;
+};
+
 @Entity()
 export class Transaction extends BaseEntity {
     @PrimaryGeneratedColumn("uuid") id!: string;
@@ -33,7 +40,7 @@ export class Transaction extends BaseEntity {
     @Column({type: "timestamptz", nullable: true}) cancelledAt?: Date;
     @Column() type!: TransactionType;
     @Column({nullable: true, type: "decimal", transformer: toFloat}) amount!: number;
-    @Column({nullable: true, type: "decimal", transformer: toFloat}) normalisedAmount?: number;
+    @Column({nullable: true, type: "decimal", transformer: toFloat}) normalisedAmount?: number | null;
     @Column({nullable: true, type: "decimal", transformer: toFloat}) jackpotAmount?: number;
     @Column() rgsRoundId?: string;
     @Column() roundId!: string;
@@ -53,6 +60,8 @@ export class Transaction extends BaseEntity {
     @Column({nullable: true}) channel?: string;
     @Column({nullable: true}) campaignType?: string;
     @Column({nullable: true}) campaignId?: string;
+    @Column({nullable: true}) walletCampaignId?: string;
+    @Column({nullable: true, type: "jsonb"}) campaignData?: ICampaignData;
     @Column({nullable: true}) ip?: string;
     @Column({}) auto!: boolean;
     @Column({nullable: true, type: "decimal", transformer: toFloat}) balanceAfter!: number;
@@ -77,7 +86,7 @@ export class Transaction extends BaseEntity {
         return await Transaction.findOneBy({rgs, rgsTransactionId});
     }
 
-    static async start(id: string, transaction: ITransaction, sessionId: string, normalisedAmount: number): Promise<Date> {
+    static async start(id: string, transaction: ITransaction, sessionId: string, normalisedAmount: number | null): Promise<Date> {
         const insertResult = await Transaction.insert({...transaction, id, sessionId, status: "started", ip: anonymiseIp(transaction.ip), normalisedAmount});
         const raw = insertResult.raw[0];
         return raw.createdAt;

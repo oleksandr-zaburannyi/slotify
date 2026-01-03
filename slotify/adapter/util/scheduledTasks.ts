@@ -3,13 +3,12 @@ import {getNextCronTimestamp, hasTask, registerSchedulerCallback, scheduleTask, 
 import logger from "@slotify/shared/lib/logger";
 import {clearAuditLogs} from "../route/clearAuditLogs";
 import cube from "../route/cube";
-import archive from "../route/archive";
 import wait from "@slotify/shared/lib/wait";
 import proxy from "../route/proxy";
 import {sendReport} from "../route/sendReports";
 import {ReportReceiver} from "../db/model/ReportReceiver";
-import {v4} from "uuid";
 import {invalidate} from "@slotify/shared/lib/cache";
+import {archiveSessions, archiveTransactions} from "../route/archive";
 
 async function scheduleFetchCurrencies() {
     await scheduleTask("fetchCurrencies", "cron", getNextCronTimestamp("0 6,18 * * *"), {});
@@ -24,7 +23,12 @@ async function scheduleCube() {
 }
 
 async function scheduleArchiveAdapter() {
-    await scheduleTask("archiveAdapter", "cron", getNextCronTimestamp("1-59/5 * * * *"), {}); // every 5 minutes starting at minute 1
+    if (!(await hasTask("archiveAdapterTransactions", "cron"))) {
+        await scheduleTask("archiveAdapterTransactions", "cron", 0, {});
+    }
+    if (!(await hasTask("archiveAdapterSessions", "cron"))) {
+        await scheduleTask("archiveAdapterSessions", "cron", 0, {});
+    }
 }
 
 async function scheduleSendReports() {
@@ -71,12 +75,6 @@ registerSchedulerCallback("cube", async () => {
     await scheduleCube();
 });
 
-registerSchedulerCallback("archiveAdapter", async () => {
-    logger.info("archiveAdapter started");
-    await archive();
-    await scheduleArchiveAdapter();
-});
-
 registerSchedulerCallback("endSession", async ({sessionId}) => {
     await proxy.endActiveSession("expired", sessionId);
 });
@@ -87,20 +85,19 @@ registerSchedulerCallback("reportReceiver", async ({timestamp, id}) => {
         await unscheduleReport(id);
         return;
     }
-    await scheduleTask("sendReport", v4().toString(), Date.now(), {timestamp, id});
+
+    try {
+        await sendReport(reportReceiver, timestamp);
+    } catch (error) {
+        logger.error(`Couldn't send report ${reportReceiver.report} to  ${reportReceiver.email}`, {
+            timestamp,
+            reportReceiver,
+            error,
+        });
+    }
+
     await scheduleReport(reportReceiver);
 });
-
-registerSchedulerCallback(
-    "sendReport",
-    async ({timestamp, id}) => {
-        const reportReceiver = await ReportReceiver.findOneBy({id});
-        if (reportReceiver) {
-            await sendReport(reportReceiver, timestamp);
-        }
-    },
-    {once: true},
-);
 
 export async function cleanupScheduledTasks() {
     try {
@@ -114,3 +111,21 @@ export async function cleanupScheduledTasks() {
         logger.warn("Failed to unschedule scheduled tasks", error);
     }
 }
+
+registerSchedulerCallback("archiveAdapterTransactions", async () => {
+    logger.info("archiveAdapterTransactions started");
+    const scheduleAsap = await archiveTransactions();
+
+    const time = Date.now() + (scheduleAsap ? 500 : 5 * 60 * 1000); //500ms or 5 minutes
+
+    await scheduleTask("archiveAdapterTransactions", "cron", time, {});
+});
+
+registerSchedulerCallback("archiveAdapterSessions", async () => {
+    logger.info("archiveAdapterSessions started");
+    const scheduleAsap = await archiveSessions();
+
+    const time = Date.now() + (scheduleAsap ? 500 : 5 * 60 * 1000); //500ms or 5 minutes
+
+    await scheduleTask("archiveAdapterSessions", "cron", time, {});
+});

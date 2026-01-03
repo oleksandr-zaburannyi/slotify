@@ -26,6 +26,7 @@ const settings = [
     "depositRetries",
     "cancelRetries",
     "retriesExpiryHours",
+    "minDecimals",
     "maxDecimals",
     "mainBets",
     "parallelRounds",
@@ -34,6 +35,7 @@ const settings = [
     "gameEnabled",
     "hideCurrencySymbol",
     "useCurrencySymbol",
+    "syncLeftmostBets",
     "defaultCampaignThemeName",
 ];
 

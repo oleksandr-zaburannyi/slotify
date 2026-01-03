@@ -1,6 +1,6 @@
 {
     "name": "@slotify/gdk",
-    "version": "4.1.1",
+    "version": "4.2.4",
     "author": "",
     "license": "UNLICENSED",
     "main": "lib/index.js",
@@ -34,8 +34,8 @@
     },
     "dependencies": {
         "@jest/globals": "^30.0.5",
-        "@slotify/rng": "^3.0.0-major-bump.0",
-        "@slotify/shared": "^2.0.28",
+        "@slotify/rng": "^4.0.2",
+        "@slotify/shared": "^2.1.11",
         "@types/jest": "^30.0.0",
         "@types/node": "^24.1.0",
         "@types/supertest": "^6.0.3",

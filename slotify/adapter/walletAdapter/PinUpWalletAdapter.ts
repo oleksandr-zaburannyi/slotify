@@ -9,7 +9,7 @@ import {Player} from "../db/model/Player";
 import {clearEmpty} from "@slotify/shared/lib/clearEmpty";
 import {errorCodes} from "./walletAdapter";
 import {Game} from "../db/model/Game";
-import {cancelCampaign, createCampaign, getAvailableBets, getCampaignByName, getFreeBetsCampaignDetails, getFreeBetsPlayerDetails, getGameActiveFreeBetsCampaigns} from "../util/external";
+import {cancelCampaign, createCampaign, getAvailableBets, getCampaignByName, getFreeBetsCampaignDetails, getGameActiveFreeBetsCampaigns} from "../util/external";
 import {ipFilter} from "../util/ip";
 import {StatusCode} from "@slotify/shared/lib/StatusCode";
 
@@ -154,8 +154,7 @@ export class PinUpWalletAdapter implements IWalletAdapter {
 
     async transaction(player: Player, transaction: IWalletTransaction, session: ISession): Promise<IWalletBalance> {
         if (transaction.campaignType === "freeBets") {
-            const campaignPlayerDetails = await getFreeBetsPlayerDetails(transaction.campaignId!, player.id);
-            if (campaignPlayerDetails?.finished) {
+            if (transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) {
                     throw new Exception("Couldn't find campaign name");
@@ -167,7 +166,7 @@ export class PinUpWalletAdapter implements IWalletAdapter {
                     playerId: player.nativeId,
                     gameId: transaction.game,
                     gameRoundId: transaction.roundId,
-                    amount: campaignPlayerDetails.state.totalWin.toString(),
+                    amount: transaction.campaignData!.totalWin.toString(),
                 };
 
                 const query = {token: this.config.providerToken};

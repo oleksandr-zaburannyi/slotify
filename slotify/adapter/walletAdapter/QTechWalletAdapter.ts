@@ -21,6 +21,7 @@ interface IConfig {
     gameLaunchPassKey: string;
     gameResultPassKey: string;
     timeout?: number;
+    currencyAliases?: Record<string, string>;
 }
 
 const failedTransactionErrorCodes: string[] = ["REQUEST_DECLINED", "INVALID_TOKEN", "ACCOUNT_BLOCKED", "LOGIN_FAILED"];
@@ -46,6 +47,17 @@ export class QTechWalletAdapter implements IWalletAdapter {
     }
 
     private parseLanguage = (language: string) => language.toLowerCase().split("_");
+
+    private fromWalletCurrency(walletCurrency: string): string {
+        return this.config.currencyAliases?.[walletCurrency] || walletCurrency;
+    }
+
+    private toWalletCurrency(currency: string) {
+        for (const walletCurrency in this.config.currencyAliases || {}) {
+            if (this.config.currencyAliases![walletCurrency] === currency) return walletCurrency;
+        }
+        return currency;
+    }
 
     async init(wallet: string, api: Express, path: string, config: IConfig) {
         this.wallet = wallet;
@@ -95,7 +107,7 @@ export class QTechWalletAdapter implements IWalletAdapter {
                 const brand = req.body.operatorId;
                 const game = Game.removeProviderPrefix(config, req.body.gameId);
                 const mode = req.body.mode === "demo" ? "fun" : "real";
-                const currency = req.body.currency.toLowerCase();
+                const currency = this.fromWalletCurrency(req.body.currency).toLowerCase();
                 const device = req.body.device;
                 const jurisdiction = req.body.jurisdiction?.toLowerCase();
                 const nativeId = req.body.playerId;
@@ -196,7 +208,8 @@ export class QTechWalletAdapter implements IWalletAdapter {
 
         const data = await this.fetch("/token", "POST", {gameId: Game.addProviderPrefix(this.config, provider!, game!), ipAddress: ip}, token);
 
-        const {playerId: nativeId, balance, currency: incomingCurrency, bonuses, maxBetAmount} = data;
+        const {playerId: nativeId, balance, bonuses, maxBetAmount} = data;
+        const incomingCurrency = this.fromWalletCurrency(data.currency).toLowerCase();
         const hasBonuses = bonuses && bonuses.length > 0;
 
         if (!nativeId) throw new Exception("Incorrect nativeId returned", {data: {data, key, wallet: this.wallet, operator, brand, game, nativeId}});
@@ -204,7 +217,7 @@ export class QTechWalletAdapter implements IWalletAdapter {
             throw new Exception("Incorrect currency returned", {
                 data: {data, currency: currency || incomingCurrency, key, wallet: this.wallet, operator, brand, game},
             });
-        if (incomingCurrency.toLowerCase() !== currency)
+        if (incomingCurrency !== currency)
             throw new Exception("Player currency does not match incoming currency", {
                 data: {data, currency, incomingCurrency, key, wallet: this.wallet, operator, brand, game},
             });
@@ -226,7 +239,7 @@ export class QTechWalletAdapter implements IWalletAdapter {
                 }
             }
         }
-        return {nativeId, token: token || key, country, balance, currency: currency.toLowerCase(), jurisdiction, nickname, sessionData: {betConfig: {maxBet: maxBetAmount}}};
+        return {nativeId, token: token || key, country, balance, currency, jurisdiction, nickname, sessionData: {betConfig: {maxBet: maxBetAmount}}};
     }
 
     async balance(player: Player, provider: string, game: string, {token}: ISession) {
@@ -279,7 +292,7 @@ export class QTechWalletAdapter implements IWalletAdapter {
             playerId: nativeId,
             roundId: roundId,
             amount: amount,
-            currency: currency.toUpperCase(),
+            currency: this.toWalletCurrency(currency).toUpperCase(),
             gameId: Game.addProviderPrefix(this.config, provider!, game!),
             created: transactionInfo.createdAt,
             completed: roundFinished,
@@ -305,7 +318,7 @@ export class QTechWalletAdapter implements IWalletAdapter {
             playerId: nativeId,
             roundId: roundId,
             amount: amount,
-            currency: currency.toUpperCase(),
+            currency: this.toWalletCurrency(currency).toUpperCase(),
             gameId: Game.addProviderPrefix(this.config, provider!, game!),
             created: createdAt,
             completed: true,

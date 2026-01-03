@@ -19,6 +19,9 @@ Each pool has the following configuration:
 2. `probability` - probability of triggering the Jackpot Win for a `bet = 1` (base currency). Actual trigger probability scales linearly with `bet` amount i.e. `triggerProbability = bet * probability`.
 3. `reset` - fixed value paid additionally to each triggered jackpot.
 
+Campaign also specify `baseCurrency` that pool amounts will be stored in.
+Setting campaign segmentation to a specific currency along with specifying the same `baseCurrency` will effectively disable multi-currency support and prevent any conversions affected by current exchange rates fluctuations.
+
 ### Game API
 If any of the Jackpot pools was won, the result is passed to the game engine to forward it for presentation in accordance with specific game rules.
 The input for the game is passed in `promo` body param of the  **Path**:`/api/games/{game}/play` endpoint. In GDK the `promo` is an argument of the `play` method respectively:
@@ -103,7 +106,8 @@ Statistics for added RTP and Hit Frequency for specific pools can be added to tr
 ```
 
 ### Feed
-Calling `/feed/campaign/:campaignId` endpoint will give the following response (intended for periodic updates in game clients and casino web-pages):
+Calling `/feed/campaign/:campaignId?currency=${currency}` endpoint provides current pool amounts (intended for periodic updates in game clients and casino web-pages).
+The pool amounts will be converted to the specified `currency`:
 ```ts
 {
     config,

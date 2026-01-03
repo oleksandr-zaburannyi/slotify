@@ -13,18 +13,12 @@ import {inspection} from "../inspection/inspection";
 import removeUnderscoredKeys from "@slotify/shared/lib/removeUnderscoredKeys";
 import {getTransactionId} from "../util/ids";
 import {Wallet} from "../db/model/Wallet";
-import {isGeoIpBlocked, isIpBlocked} from "../util/ip";
 import {scheduleTask, unsheduleTask} from "@slotify/shared/lib/scheduler";
 import {executeInQueue} from "@slotify/shared/lib/queue";
 import {serviceMetrics} from "../util/metrics";
 import {ReportExclusion} from "../db/model/ReportExclusion";
 import {isOneTimeKeyBlocked} from "../util/wallet";
 import {round} from "@slotify/shared/lib/round";
-
-const apiBlockedCountries = (process.env.API_BLOCKED_COUNTRIES || "")
-    .split(",")
-    .filter(country => !!country)
-    .map(country => country.toLowerCase());
 
 type IAuthenticate = {
     nativeId: string;
@@ -41,11 +35,20 @@ type IAuthenticate = {
     popups?: IExceptionPopup[];
 };
 
+async function getNormalisedAmount(roundId: string, amount: number): Promise<number | null> {
+    const firstBet = await Transaction.findOne({where: {roundId}, order: {createdAt: "ASC"}});
+    if (!firstBet && amount === 0) return null;
+    if (firstBet && firstBet.amount === 0) return null;
+
+    if (firstBet) return round(amount / firstBet.amount, 10);
+    return 1;
+}
+
 export default {
-    async authenticate(wallet: string, operator: string, key: string, provider: string, game: string, ip?: string, ipBlockHeader?: boolean, channel?: "desktop" | "mobile"): Promise<IAuthenticate> {
+    async authenticate(wallet: string, operator: string, key: string, provider: string, game: string, ip?: string, ipCountry?: string, ipRegion?: string, channel?: "desktop" | "mobile"): Promise<IAuthenticate> {
         const walletAdapter = await getWalletAdapter(wallet);
         try {
-            logger.info("Authenticating player", {wallet, operator, key});
+            logger.info("Authenticating player", {wallet, operator, key, ipCountry, ipRegion});
 
             const cachedSession = await Session.getCachedSession(key, provider, game, await Wallet.getKeyCacheExpiry(wallet));
             if (cachedSession) {
@@ -58,9 +61,8 @@ export default {
             const {balance, token, sessionData, popups, campaignTypes, ...nativeUser} = await walletAdapter.authenticate(key, operator, provider, game, ip, channel);
 
             if (nativeUser.currency.toLowerCase() !== nativeUser.currency) throw new Exception("Player currency should be lowercase", {data: {...nativeUser}});
-            if (nativeUser.country && apiBlockedCountries.includes(nativeUser.country.toLowerCase())) throw new Exception("Territory blocked (API country)", {code: "BLOCKED_TERRITORY", data: {...nativeUser}});
-            if (await isIpBlocked(wallet, ipBlockHeader)) throw new Exception("Territory blocked (IP)", {code: "BLOCKED_TERRITORY", data: {...nativeUser}});
-            if (await isGeoIpBlocked(wallet, ip)) throw new Exception("Territory blocked (Geo IP)", {code: "BLOCKED_TERRITORY", data: {...nativeUser}});
+
+            if (await Wallet.isTerritoryBlocked(wallet, ipCountry, ipRegion, nativeUser.country)) throw new Exception("Territory blocked", {code: "BLOCKED_TERRITORY", data: {...nativeUser}});
             if (await isOneTimeKeyBlocked(wallet, key)) throw new Exception("One-time key blocked", {code: "PLAYER_UNAUTHORIZED", data: {...nativeUser}});
             if (!(await getSupportedCurrencies()).includes(nativeUser.currency)) throw new Exception("Currency not supported", {data: {...nativeUser}, code: "CURRENCY_NOT_SUPPORTED"});
 
@@ -68,8 +70,8 @@ export default {
             if (player.blocked) throw new Exception("Player blocked", {code: "PLAYER_BLOCKED", data: {wallet, operator, key, player, nativeId: nativeUser.nativeId, nativeUser}});
             if (!(await Game.verify(game, wallet, operator, nativeUser.brand))) throw new Exception("Game not available", {data: {game}, code: "GAME_NOT_AVAILABLE"});
 
-            const isPlayerExcluded = await ReportExclusion.isPlayerExcluded(player.id);
-            const {sessionId} = await Session.init(player.id, token, key, provider, game, sessionData, ip, isPlayerExcluded);
+            const playerExclusion = await ReportExclusion.isPlayerExcluded(player.id);
+            const {sessionId} = await Session.init(player.id, token, key, provider, game, sessionData, ip, playerExclusion.excluded);
 
             await authPromo({
                 provider,
@@ -84,9 +86,9 @@ export default {
                 nickname: player.nickname,
                 campaignTypes,
             });
-            futureAnthem.authenticate(player, isPlayerExcluded);
+            futureAnthem.authenticate(player, playerExclusion);
 
-            logger.info(`Player authenticated ${player.id}`, {wallet, operator, key, player, nativeId: nativeUser.nativeId, nativeUser});
+            logger.info(`Player authenticated ${player.id}`, {wallet, operator, key, player, nativeId: nativeUser.nativeId, nativeUser, ipCountry, ipRegion});
             return {...nativeUser, currency: player.currency, balance, playerId: player.id, sessionData: sessionData ? removeUnderscoredKeys(sessionData) : undefined, sessionId, popups};
         } catch (e) {
             logger.info(`Authentication failed (${(e as Error).message})`, {wallet, operator, error: e});
@@ -106,6 +108,7 @@ export default {
         let {
             campaignType,
             campaignId,
+            walletCampaignId,
             campaignData,
             callFinished,
             jackpotAmount,
@@ -123,17 +126,18 @@ export default {
             nickname,
         });
 
+        if (campaignType && transaction.campaignType) {
+            throw new Exception("RGS already specified campaign for the transaction", {data: {transaction, campaignType, campaignId, campaignData}});
+        }
+
         if (campaignType) transaction.campaignType = campaignType;
         if (campaignId) transaction.campaignId = campaignId;
+        if (walletCampaignId) transaction.walletCampaignId = walletCampaignId;
         if (campaignData) transaction.campaignData = campaignData;
+
         if (jackpotAmount && transaction.jackpotAmount) throw new Exception("Can't overwrite jackpot amount");
         if (jackpotAmount) {
-            transaction.jackpotAmount = jackpotAmount;
-            // for withdrawal jackpotAmount is already included in amoutnt
-            // deposit requires appending it to the total amount
-            if (transaction.type === "deposit") {
-                transaction.amount += jackpotAmount;
-            }
+            transaction.jackpotAmount = jackpotAmount; // informative
         }
 
         let createdAt = existingTransaction?.createdAt;
@@ -141,9 +145,7 @@ export default {
         const walletAdapter = await getWalletAdapter(wallet);
         const session = await Session.getAndProlong(player.id, transaction.provider, transaction.game, !transaction.auto, walletAdapter.sessionExpiryMinutes);
         if (!existingTransaction) {
-            const firstBet = await Transaction.findOne({where: {roundId: transaction.roundId}, order: {createdAt: "ASC"}});
-            const normalisedAmount = firstBet ? round(transaction.amount / firstBet.amount, 10) : 1;
-            createdAt = await Transaction.start(transactionId, transaction, session.sessionId, normalisedAmount);
+            createdAt = await Transaction.start(transactionId, transaction, session.sessionId, await getNormalisedAmount(transaction.roundId, transaction.amount));
             try {
                 await inspection(transactionId, transaction, player, session.isPlayerExcluded);
             } catch (e) {
@@ -227,7 +229,7 @@ export default {
             const originalSession = transaction?.sessionId ? await Session.get(transaction.sessionId) : null;
             const {balance} = await executeInQueue(
                 await getParallelTransactionId(wallet, transaction.playerId),
-                async () => await walletAdapter.cancel(player, {transactionId: transaction.id, ...transaction} as IWalletTransaction, session, originalSession),
+                async () => await walletAdapter.cancel(player, {transactionId: transaction.id, ...transaction} as IWalletTransaction, session, originalSession, auto),
                 20,
                 60000,
             );

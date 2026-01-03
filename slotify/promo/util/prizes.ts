@@ -39,10 +39,9 @@ async function payPrize({type, id, playerId, data, campaignId}: CampaignPrize, m
                 await Campaign.createWithState(data, state, manager);
                 break;
             case "cash":
-                const campaign = (await manager.findOneBy<Campaign>(Campaign, {campaignId}))!;
-                await sendTransaction("prize_" + id, playerId, data.amount, data.jackpotAmount, campaignId, campaign.type, campaign.name);
-                break;
             case "item":
+                const campaign = (await manager.findOneBy<Campaign>(Campaign, {campaignId}))!;
+                await sendTransaction("prize_" + id, playerId, data.amount || 0, data.jackpotAmount, campaignId, campaign.type, campaign.name, data);
                 break;
         }
         await manager.update(CampaignPrize, {id}, {paid: true});
@@ -51,8 +50,8 @@ async function payPrize({type, id, playerId, data, campaignId}: CampaignPrize, m
     }
 }
 
-async function sendTransaction(rgsTransactionId: string, playerId: string, amount: number, jackpotAmount: number, campaignId: string, campaignType: string, name: string) {
-    const body = JSON.stringify({rgsTransactionId, playerId, repeat: 1, type: "deposit", amount, jackpotAmount, campaignId, campaignType, category: "promo", name, roundId: v4(), roundFinished: true});
+async function sendTransaction(rgsTransactionId: string, playerId: string, amount: number, jackpotAmount: number, campaignId: string, campaignType: string, name: string, campaignData?: any) {
+    const body = JSON.stringify({rgsTransactionId, playerId, type: "deposit", amount, jackpotAmount, campaignId, campaignType, campaignData, category: "promo", name, roundId: v4(), roundFinished: true});
     const headers = {
         "Content-Type": "application/json",
         "X-Server-Authorization": crypto.createHmac("sha256", process.env.ADAPTER_RGS_KEY!).update(body).digest("hex"),

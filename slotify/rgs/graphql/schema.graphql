@@ -111,6 +111,7 @@ type Room {
     operators: [String]
     brands: [String]
     variant: String
+    ips: [String]
 }
 
 type Rooms {
@@ -131,7 +132,9 @@ input RoomInput {
     wallets: [String]
     operators: [String]
     brands: [String]
+    ips: [String]
     provablyFair: JSON
+    variant: String
 }
 
 type FixedCurrencyRate {
@@ -168,6 +171,7 @@ type Wager {
     data: JSON
     state: JSON
     params: JSON
+    promo: JSON
     next: [String]
     auto: Boolean
 }
@@ -399,7 +403,7 @@ type Query {
     fixedCurrencyRates(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): FixedCurrencyRates! @auth(permission: "fixedCurrencyRates")
     checkSettings(wallet: String, operator: String, brand: String, provider: String, game: String, jurisdiction: String, currency: String): CheckSettings! @auth(permission: "settings")
     availableBets(currency: String!, wallet: String!, operator: String!, brand: String, provider: String!, game: String!, jurisdiction: String, roomId: String): AvailableBets! @auth(permission: "availableBets")
-    availableBetsBulk(currencies: [String!], wallet: String!, operator: String, brand: String, provider: String!, games: [String!]!, jurisdiction: String): AvailableBets! @auth(permission: "availableBets")
+    availableBetsBulk(currencies: [String!], wallet: String!, operator: String, brand: String, provider: String, games: [String!]!, jurisdiction: String): AvailableBets! @auth(permission: "availableBets")
     gameList: [String] @auth(permission: "*")
     providerList: [String] @auth(permission: "*")
     currencyList: [String] @auth(permission: "*")
@@ -443,5 +447,6 @@ type Mutation {
     deleteRtpMonitoring(id: ID!): Boolean @auth(permission: "manageRtpMonitoring") @log(variables: true, result: true)
     importRtpMonitorings(data: String!): ImportResults @auth(permission: "manageRtpMonitoring") @log(variables: true, result: true)
 
-    autoCompleteRound(roundId: ID!): Boolean
+    autoCompleteRound(roundId: ID!): Boolean @auth(permission: "closeTransaction")
+    payDrawWin(drawWinId: ID!): Boolean @auth(permission: "closeTransaction")
 }

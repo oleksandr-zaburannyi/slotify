@@ -75,7 +75,10 @@ export const server: IMultiplayerGame = {
     return {message: {drawEndTime: state.drawEndTime}};
   },
   command: ({time, playerId, action, bet, currency, params, state, betLimits}) => {
-    if (action !== "main" || !Number.isInteger(params.luckyNumber) || state.acceptedBets.some(acceptedBet => acceptedBet.playerId === playerId)) {
+    if (
+      action !== "main" || !Number.isInteger(params.luckyNumber) ||
+      state.acceptedBets.some(acceptedBet => acceptedBet.playerId === playerId)
+    ) {
       return {valid: false, instantTick: false, message: {betAccepted: false}};
     }
     return {valid: true, instantTick: true};
@@ -417,7 +420,15 @@ export const server: IMultiplierGame = {
         },
         commands: (strategy, state) => {
             return [
-                {commandId: "command-123", playerId: "player-123", action: "main", bet: 10, currency: "eur", params: {drawIndex: state.drawIndex}},
+                {
+                  commandId: "command-123",
+                  playerId: "player-123",
+                  action: "main", bet: 10,
+                  currency: "eur",
+                  params: {
+                    drawIndex: state.drawIndex
+                  }
+                },
             ]
         }
     },
@@ -588,8 +599,8 @@ const channel = "12d42bae-9684-40bd-a38d-d764259bb053";
 const systemId = "6923b28d-fcd5-4a32-bfef-9bd891aed34d";
 
 const connectedSignature = await createJsonHmacSignature(JSON.stringify({channel, systemId}), secretKey);
-
-const websocket = await new WebSocket(`ws://localhost:8087/websocket/multiplayer?channel=${channel}&type=system&systemId=${systemId}&signature=${connectedSignature}`);
+const wsParams = `channel=${channel}&type=system&systemId=${systemId}&signature=${connectedSignature}`;
+const websocket = await new WebSocket(`ws://localhost:8087/websocket/multiplayer?${wsParams}`);
 ```
 
 - `channel` - room id
@@ -600,10 +611,12 @@ Following example shows how to send system commands through WebSocket:
 ```typescript
 const load = {
     type: 'systemCommand',
-    action: 'cardReveal',
-    params: {
+    payload: {
+      action: 'cardReveal',
+      params: {
         //your params here
-    },
+      },
+    }
 };
 const message = JSON.stringify(load);
 const messageSignature = await createJsonHmacSignature(

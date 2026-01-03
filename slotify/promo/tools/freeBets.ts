@@ -27,7 +27,7 @@ async function getGames(): Promise<Record<string, string[]>> {
     return await fetchAndParse(`${getServiceUrl("rgs")}/games`);
 }
 
-async function validate({config, providers, games, playerIds, nativeIds}: ICampaignSetup<IConfig>) {
+async function validate({config, providers, games, playerIds, nativeIds, wallets, operators, brands}: ICampaignSetup<IConfig>) {
     if (!config) throw new Exception("Config must be specified");
     if (typeof config.amount !== "number") throw new Exception("Amount param should be a number");
     if (typeof config.bets !== "number") throw new Exception("Bets param should be a number");
@@ -49,11 +49,17 @@ async function validate({config, providers, games, playerIds, nativeIds}: ICampa
 
     for (const provider of providers) {
         for (const game of games) {
-            const currency = config.currency || baseCurrency;
-            try {
-                await convertBet(config.amount, currency, currency, {provider, game});
-            } catch {
-                throw new Exception(`Bet ${config.amount} ${currency} not supported on game ${game} from provider ${provider}`);
+            for (const wallet of wallets || [undefined]) {
+                for (const operator of operators || [undefined]) {
+                    for (const brand of brands || [undefined]) {
+                        const currency = config.currency || baseCurrency;
+                        try {
+                            await convertBet(config.amount, currency, currency, {provider, game, wallet, operator, brand});
+                        } catch {
+                            throw new Exception(`Bet ${config.amount} ${currency} not supported on game ${game} from provider ${provider}`, {data: {game, provider, wallet, operator, brand, currency, config}});
+                        }
+                    }
+                }
             }
         }
     }

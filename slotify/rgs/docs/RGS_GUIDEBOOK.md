@@ -68,6 +68,7 @@ Settings can handle any key but there are predefined keys associated with specif
 - `depositRetries` & `cancelRetries` - comma separated retries intervals in minutes i.e. `1,5,10` will cause 1st retry in 1 minute, 2nd in 5min after 1st, 3rd and each following after 10 min after each
 - `retriesExpiryHours` - number of hours after which an retries stop (by default it is `72` hours)
 - `provablyFair` - if set to `"true"` value it will activate provably fair mode
+- `minDecimals` - limits minimum number of currency decimal places even if currency can support less (by default it is `0`)
 - `maxDecimals` - limits maximum number of currency decimal places even if currency can support more (by default it is `2`)
 - `parallelRounds` - if set to `"true"` enables opening multiple rounds in parallel (without waiting for previous to finish)
 - `hidePromoOptOut` - if set to `"true"` removes "Opt out" button from campaign UI (`serverOnly` must be set to `false`)
@@ -75,6 +76,7 @@ Settings can handle any key but there are predefined keys associated with specif
 - `gameEnabled` - if set value other than `"true"` makes the game disabled
 - `hideCurrencySymbol` - hides currency symbol (displays just a value) for default currency formatter
 - `defaultCampaignThemeName` - default campaign theme per type i.e. `{"freeBets": "my-theme"}`
+- `syncLeftmostBets` - removes non-main bet if they don't have equivalent in main bet due to min bet limits
 
 ## Fixed currency exchange rates
 

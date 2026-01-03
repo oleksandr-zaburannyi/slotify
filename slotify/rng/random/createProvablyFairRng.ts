@@ -1,7 +1,7 @@
 import {validateRandomLimit} from "./factory";
 import * as crypto from "crypto";
 import {IRoundRngState} from "./IRoundRngState";
-import {unbiasedRandomInteger} from "./unbiasedRandomInteger";
+import {unbiasedRandomInteger} from "../unbiasedRandomInteger";
 import {IRandom} from "./IRandom";
 import {IDrawRngState} from "./IDrawRngState";
 
