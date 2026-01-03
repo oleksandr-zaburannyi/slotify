@@ -1,0 +1,4 @@
+docs/
+*.md
+package-lock.json
+isaac.js

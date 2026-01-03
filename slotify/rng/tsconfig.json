@@ -1,0 +1,19 @@
+{
+    "compilerOptions": {
+        "target": "es2016",
+        "module": "commonjs",
+        "resolveJsonModule": true,
+        "emitDecoratorMetadata": true,
+        "experimentalDecorators": true,
+        "esModuleInterop": false,
+        "allowSyntheticDefaultImports": true,
+        "skipLibCheck": true,
+        "strict": true,
+        "lib": ["es2018.promise"],
+        "types": ["node"],
+        "declaration": true,
+        "outDir": "lib"
+    },
+    "include": ["*.ts", "**/*.ts"],
+    "exclude": ["lib", "isaac.js", "test/**/*"]
+}

@@ -1,0 +1,182 @@
+scalar JSON
+scalar JSONObject
+
+type Meta {
+    total: Int
+    limit: Int
+    offset: Int
+    hasPrev: Boolean
+    hasNext: Boolean
+}
+
+enum SortOrder {
+    ASC
+    DESC
+}
+input Sort {
+    field: String!
+    order: SortOrder!
+}
+enum FilterType {
+    IN
+    EQUAL
+    NOT_EQUAL
+    LIKE
+    GREATER
+    GREATER_OR_EQUAL
+    LOWER
+    LOWER_OR_EQUAL
+    NULL
+    NOT_NULL
+    CONTAIN
+}
+input Filter {
+    type: FilterType!
+    field: String!
+    jsonField: String
+    value: JSON
+}
+type ImportResults {
+    added: Int
+    edited: Int
+    ids: JSON
+}
+
+directive @auth(permission: String!) on FIELD_DEFINITION
+directive @log(variables: Boolean, result: Boolean) on FIELD_DEFINITION
+
+##########
+
+type Campaigns {
+    meta: Meta
+    items: [Campaign]
+}
+
+type Campaign {
+    campaignId: ID
+    type: String
+    name: String
+    createdAt: Float #timestamp
+    start: Float #timestamp
+    end: Float #timestamp
+    enabled: Boolean
+    optIns: Int
+    optOuts: Int
+    wallets: [String]
+    operators: [String]
+    brands: [String]
+    providers: [String]
+    games: [String]
+    currencies: [String]
+    playerIds: [String]
+    nativeIds: [String]
+    config: JSON
+    state: JSON
+    themeId: String
+}
+
+input CampaignInput {
+    enabled: Boolean #default is true
+    type: String #campaign type
+    name: String #name of the campaign
+    start: Float #timestamp
+    end: Float #timestamp
+    wallets: [String]
+    operators: [String]
+    brands: [String]
+    providers: [String]
+    games: [String]
+    currencies: [String]
+    playerIds: [String] #platform's player ids
+    nativeIds: [String] #wallet's player ids
+    config: JSON #tool specific configuration
+    autoOptIn: Boolean #depracated
+    themeId: String
+}
+
+type CampaignPlayers {
+    meta: Meta
+    items: [CampaignPlayer]
+}
+
+type CampaignPlayer {
+    updatedAt: Float #timestamp
+    campaignId: String
+    playerId: String
+    state: JSON
+    acknowledged: Boolean
+    finished: Boolean
+    optIn: Boolean
+    init: Boolean
+}
+
+type CampaignPrizes {
+    meta: Meta
+    items: [CampaignPrize]
+}
+
+type CampaignPrize {
+    createdAt: Float #timestamp
+    playerId: String
+    campaignId: String
+    type: String
+    data: JSON
+    comment: String
+    paid: Boolean
+}
+
+type CampaignLogs {
+    meta: Meta
+    items: [CampaignLog]
+}
+
+type CampaignLog {
+    createdAt: Float #timestamp
+    campaignId: String
+    name: String
+    data: JSON
+}
+
+input ThemeInput {
+    name: String!
+    campaignType: String!
+    translations: JSON!
+    icons: JSON!
+}
+
+type Themes {
+    meta: Meta
+    items: [Theme]
+}
+
+type Theme {
+    themeId: ID
+    createdAt: Float #timestamp
+    updatedAt: Float #timestamp
+    name: String
+    campaignType: String
+    translations: JSON
+    icons: JSON
+}
+
+type Query {
+    schema: String!
+    campaigns(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Campaigns! @auth(permission: "campaigns")
+    campaignPlayers(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CampaignPlayers! @auth(permission: "campaigns")
+    campaignPrizes(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CampaignPrizes! @auth(permission: "campaigns")
+    campaignLogs(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CampaignLogs! @auth(permission: "campaigns")
+    themes(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Themes! @auth(permission: "campaigns")
+    defaultThemes: JSONObject @auth(permission: "campaigns")
+}
+
+type Mutation {
+    addCampaign(data: CampaignInput!): ID @auth(permission: "manageCampaigns") @log(variables: true, result: true)
+    editCampaign(campaignId: ID!, data: CampaignInput!): Boolean @auth(permission: "manageCampaigns") @log(variables: true, result: true)
+    deleteCampaign(campaignId: ID!): Boolean @auth(permission: "manageCampaigns") @log(variables: true, result: true)
+    campaignSystemEvent(campaignId: ID!, eventName: String!, eventId: String!, params: JSON): JSON @auth(permission: "manageCampaigns") @log(variables: true, result: true)
+    clearOptOut(campaignId: ID!, playerId: String!): Boolean @auth(permission: "manageCampaigns")
+    addTheme(data: ThemeInput!): ID @auth(permission: "manageThemes") @log(variables: true, result: true)
+    editTheme(themeId: ID!, data: ThemeInput!): Boolean @auth(permission: "manageThemes") @log(variables: true, result: true)
+    deleteTheme(themeId: ID!): Boolean @auth(permission: "manageThemes") @log(variables: true, result: true)
+    importThemes(data: String!): ImportResults @auth(permission: "manageThemes") @log(variables: true, result: true)
+}
