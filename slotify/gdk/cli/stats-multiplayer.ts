@@ -30,9 +30,10 @@ simulator<IMultiplayerGame, ITick, IRunData, InitData>(
         };
     },
     async (env, game) => {
+        const roomId = v4();
         const config = game.simulator?.config && game.simulator.config(env.strategy!);
         const time = Date.now();
-        const initResult = await game.init({time, config}, createRandom());
+        const initResult = await game.init({time, roomId, config}, createRandom());
         const nextTime = initResult.nextTickTime;
         const state = initResult.state;
         return {

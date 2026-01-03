@@ -30,6 +30,11 @@ let envs = {
 
 const gameServices = [
     {
+        name: "trading",
+        cwd: "../trading-game-servers",
+        port: 8093,
+    },
+    {
         name: "example-provider",
         cwd: "../example-game-servers",
         port: 8092,
@@ -43,7 +48,7 @@ const gameServices = [
         name: "tequity",
         cwd: "../tequity-game-servers",
         port: 8090,
-    }
+    },
 ];
 
 

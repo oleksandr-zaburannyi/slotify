@@ -159,6 +159,9 @@ export class SlotifyWalletAdapter implements IWalletAdapter {
             rgsTransactionId: transaction.transactionId,
             name: transaction.name,
             channel: transaction.channel,
+            campaignId: transaction.campaignId,
+            campaignType: transaction.campaignType,
+            campaignData: transaction.campaignData,
         };
         const data = await this.fetch<ITransactionRequest, ITransactionResponse>("/transaction", "PUT", params);
         const {balance} = data;

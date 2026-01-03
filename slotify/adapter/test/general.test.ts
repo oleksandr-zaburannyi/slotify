@@ -12,7 +12,6 @@ import {TransactionArchive} from "../db/model/TransactionArchive";
 import {SessionArchive} from "../db/model/SessionArchive";
 import {RoundVerificationArchive} from "../db/model/RoundVerificationArchive";
 import {cleanupAfterTests} from "./cleanup";
-import archive from "../route/archive";
 
 let api: Express;
 beforeAll(async () => {
@@ -131,7 +130,9 @@ describe("general", () => {
         const newVerification = await RoundVerification.create({roundId: newTransaction.roundId, action: "passed", score: 0, details: {}}).save();
 
         //start archiving
-        await archive();
+        const {archiveSessions, archiveTransactions} = await import("../route/archive");
+        await archiveSessions();
+        await archiveTransactions();
 
         expect(await TransactionArchive.find({})).toEqual([oldTransaction]);
         expect(await Transaction.find({})).toEqual([unfinishedTransaction, newTransaction]);

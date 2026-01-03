@@ -1,6 +1,6 @@
 {
     "name": "@slotify/connector",
-    "version": "2.2.0",
+    "version": "2.2.10",
     "publishConfig": {
         "registry": "https://npm.pkg.github.com/"
     },
@@ -9,21 +9,24 @@
         "start": "vite",
         "start:dev": "npx onchange -i -k 'src/**/**.{ts,tsx,json}' -- npm run build:local",
         "append:version": "echo \"/*\" VERSION: \"$(cat $(pwd)/package.json | jq -r \".version\") */\" >> lib/connector.js",
+        "prepend:version": "(echo \"/* VERSION: $(cat package.json | jq -r \".version\") */\" && cat lib/connector.js) > lib/connector.tmp && mv lib/connector.tmp lib/connector.js",
         "append:code": "cat lib/connector.min.js >> lib/connector.js",
         "append:license": "cat lib/connector.min.js.LICENSE.txt >> lib/connector.js",
         "build": "rm -Rf lib/* && npm run build:bundle && npm run append:version && npm run append:code && npm run append:license && rm lib/connector.min.js && rm lib/connector.min.js.LICENSE.txt",
+        "delete-source": " find . -type f -name '*.ts' -delete",
         "build:react": "tsc & vite build",
         "build:bundle": "webpack --config webpack.config.js --stats errors-warnings",
         "build:local": "npm run build && npx serve lib -p 3001",
         "lint": "eslint src/ --ext .js,.jsx,.ts,.tsx",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
-        "docs": "npx mdpdf docs/CONNECTOR_OPERATOR_API.md; npx mdpdf docs/CONNECTOR_GAME_CLIENT_API.md; npx mdpdf docs/CONNECTOR_GUIDEBOOK.md;"
+        "docs": "npx mdpdf docs/CONNECTOR_OPERATOR_API.md; npx mdpdf docs/CONNECTOR_GAME_CLIENT_API.md; npx mdpdf docs/CONNECTOR_GUIDEBOOK.md;",
+        "obfuscate": "npx --yes javascript-obfuscator --target=browser --options-preset=low-obfuscation --output lib/ lib/ && sleep 1 && npm run prepend:version"
     },
     "dependencies": {
         "@jest/globals": "^30.0.5",
         "@rlx/feim": "^1.17.1",
-        "@slotify/shared": "^2.1.1",
+        "@slotify/shared": "^2.1.11",
         "@testing-library/jest-dom": "^6.6.4",
         "@types/react": "^19.1.9",
         "@types/react-dom": "^19.1.7",

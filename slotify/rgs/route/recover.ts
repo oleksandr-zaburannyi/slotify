@@ -5,7 +5,7 @@ import {IPlayer} from "./authenticate";
 
 export default async function recover(player: Omit<IPlayer, "sessionId" | "nativeId">, provider: string, game: string, channel: string | undefined, ip: string, immediateComplete: boolean = false) {
     const rounds: Awaited<ReturnType<typeof Round.mapRoundToPlayer>>[] = [];
-    for (const round of await Round.getStartedFromUser(["started"], player.playerId, provider, game)) {
+    for (const round of await Round.getStartedFromUser(player.playerId, provider, game)) {
         round.wagers = await Wager.getByRoundId(round.roundId);
 
         const lastWager = round.wagers[round.wagers.length - 1];

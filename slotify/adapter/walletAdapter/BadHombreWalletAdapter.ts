@@ -8,7 +8,7 @@ import launch from "../route/launch";
 import {Player} from "../db/model/Player";
 import IWalletAdapter, {ISession, IWalletBalance, IWalletTransaction} from "./IWalletAdapter";
 import {Game} from "../db/model/Game";
-import {cancelCampaign, createCampaign, getAvailableBetsBulk, getCampaignByName, getFreeBetsCampaignDetails, getFreeBetsPlayerDetails, getRgsCurrencies, getSettings} from "../util/external";
+import {cancelCampaign, createCampaign, getAvailableBetsBulk, getCampaignByName, getFreeBetsCampaignDetails, getRgsCurrencies, getSettings} from "../util/external";
 import {ipFilter} from "../util/ip";
 import {errorCodes} from "./walletAdapter";
 
@@ -438,15 +438,14 @@ export class BadHombreWalletAdapter implements IWalletAdapter {
             const {totalBalance} = await this.fetch<ICashDrop, IBalanceResponse>("/api/game/bonus/cashdrop", params, player.brand!);
             return {balance: totalBalance};
         } else if (transaction.campaignType === "freeBets") {
-            const campaignPlayerDetails = await getFreeBetsPlayerDetails(transaction.campaignId!, player.id);
-            if (campaignPlayerDetails?.finished) {
+            if (transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) throw new Exception("Couldn't find campaign name");
                 const bonus = this.getBonus(campaign.name);
                 const params = {
                     bonus,
                     id: transaction.transactionId,
-                    amount: campaignPlayerDetails.state.totalWin,
+                    amount: transaction.campaignData!.totalWin,
                     game: transaction.game!,
                     session: session.token,
                     extraData: null,

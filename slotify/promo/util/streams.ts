@@ -1,12 +1,13 @@
-import {hasTask, registerSchedulerCallback, scheduleTask, setTaskTimestamp, synchronizedTask, unsheduleTask} from "@slotify/shared/lib/scheduler";
+import {getNextCronTimestamp, hasTask, registerSchedulerCallback, scheduleTask, setTaskTimestamp, synchronizedTask, unsheduleTask} from "@slotify/shared/lib/scheduler";
 import {IStreamEntry, StreamEntry} from "../db/model/StreamEntry";
 import {getConnection} from "@slotify/shared/lib/dbOptions";
-import {In, IsNull, MoreThan} from "typeorm";
+import {In, IsNull, LessThanOrEqual, MoreThan} from "typeorm";
 import logger from "@slotify/shared/lib/logger";
 import {CampaignState} from "../db/model/CampaignState";
 import {Campaign} from "../db/model/Campaign";
-import {tools} from "../tools/tools";
 import Exception from "@slotify/shared/lib/Exception";
+import {StreamSnapshot} from "../db/model/StreamSnapshot";
+import {getTool} from "../tools/tools";
 
 export type IStreamCampaignState<TAccumulationData> = {
     data: TAccumulationData;
@@ -28,48 +29,64 @@ export type IStreamSynchronizedAccumulator<TConfig = any, TEntryData = any, TAcc
 export async function initStreams<TConfig, TEntryData, TAccumulationData>(campaignType: string, accumulator: IStreamAccumulator<TConfig, TEntryData, TAccumulationData>) {
     logger.info(`Registering stream ${campaignType} callback`);
     registerSchedulerCallback(`streamAccumulator:${campaignType}`, ({campaignId}) => accumulateStream(campaignType, campaignId, accumulator));
-    await rehydrateAccumulators(campaignType);
+
+    if (getTool(campaignType).snapshotCron) {
+        logger.info(`Registering snapshot ${campaignType} callback`);
+        registerSchedulerCallback(`streamSnapshot:${campaignType}`, ({campaignId}) => createSnapshot(campaignType, campaignId));
+    }
+
+    await rehydrateStreams(campaignType);
 }
 
-async function rehydrateAccumulators(streamType: string) {
-    logger.info(`Rehydrating stream ${streamType} accumulators`);
-
-    const streamCampaignTypes = Object.entries(tools)
-        .filter(([, tool]) => tool.accumulator)
-        .map(([type]) => type);
+async function rehydrateStreams(type: string) {
+    logger.info(`Rehydrating streams ${type}`);
 
     const activeAccumulatorCampaigns = await Campaign.find({
         where: [
             {
                 enabled: true,
                 end: IsNull(),
-                type: In(streamCampaignTypes),
+                type,
             },
             {
                 enabled: true,
                 end: MoreThan(new Date()),
-                type: In(streamCampaignTypes),
+                type,
             },
         ],
     });
 
     for (const campaign of activeAccumulatorCampaigns) {
-        const {campaignId, type} = campaign;
+        const {campaignId} = campaign;
 
-        const taskType = `streamAccumulator:${type}`;
-        if (!(await hasTask(taskType, campaignId))) {
-            logger.info(`Rehydrating stream ${taskType} ${campaignId} accumulator task`);
+        const accumulatorTaskType = `streamAccumulator:${type}`;
+        if (!(await hasTask(accumulatorTaskType, campaignId))) {
+            logger.info(`Rehydrating stream ${accumulatorTaskType} ${campaignId} accumulator task`);
 
             const campaignState = await CampaignState.findOneBy({campaignId});
             if (!campaignState || campaignState.ended || !campaignState.state) {
-                logger.error(`Campaign state rehydration error ${taskType} ${campaignId}`, {campaignState});
+                logger.error(`Campaign state rehydration error ${accumulatorTaskType} ${campaignId}`, {campaignState});
                 continue;
             }
 
             const {nextAccumulationTime} = campaignState.state;
-            await scheduleTask(taskType, campaignId, nextAccumulationTime, {campaignId});
+            await scheduleTask(accumulatorTaskType, campaignId, nextAccumulationTime, {campaignId});
+        }
+
+        const snapshotTaskType = `streamSnapshot:${type}`;
+        const snapshotCron = getTool(type).snapshotCron;
+        if (snapshotCron && !(await hasTask(snapshotTaskType, campaignId))) {
+            logger.info(`Rehydrating stream snapshot ${snapshotTaskType} ${campaignId} task`);
+            const nextSnapshotTime = getNextCronTimestamp(snapshotCron);
+            await scheduleTask(snapshotTaskType, campaignId, nextSnapshotTime, {campaignId});
         }
     }
+}
+
+export async function streamEntry<TEntryData>(streamId: string, data: TEntryData): Promise<IStreamEntry<TEntryData>> {
+    const insertResult = await StreamEntry.insert<any>({streamId, data});
+    const id = insertResult.raw[0].id;
+    return {id, data};
 }
 
 export async function accumulateStream<TConfig, TEntryData, TAccumulationData>(
@@ -97,7 +114,12 @@ export async function accumulateStream<TConfig, TEntryData, TAccumulationData>(
     });
     const processedEntriesIds = entries.map(entry => entry.id);
 
-    const {data, nextAccumulationTime} = await accumulator({config: campaign.config, entries, latestAccumulationData, time});
+    const {data, nextAccumulationTime} = await accumulator({
+        config: campaign.config,
+        entries,
+        latestAccumulationData,
+        time,
+    });
 
     const index = latestAccumulationIndex + 1;
 
@@ -131,18 +153,107 @@ export async function accumulateStreamSynchronously<TConfig, TEntryData, TAccumu
 
 export async function startStream(campaignType: string, campaignId: string, nextAccumulationTime: number) {
     logger.info(`Starting stream ${campaignType} ${campaignId}`);
-    const taskType = `streamAccumulator:${campaignType}`;
-    await scheduleTask(taskType, campaignId, nextAccumulationTime, {campaignType, campaignId});
+    const accumulatorTaskType = `streamAccumulator:${campaignType}`;
+    await scheduleTask(accumulatorTaskType, campaignId, nextAccumulationTime, {campaignId});
+
+    const snapshotCron = getTool(campaignType).snapshotCron;
+    if (snapshotCron) {
+        const snapshotTaskType = `streamSnapshot:${campaignType}`;
+        await scheduleTask(snapshotTaskType, campaignId, getNextCronTimestamp(snapshotCron), {campaignId});
+    }
 }
 
 export async function stopStream(campaignType: string, campaignId: string) {
     logger.info(`Stopping stream ${campaignId}`);
-    const taskType = `streamAccumulator:${campaignType}`;
-    await unsheduleTask(taskType, campaignId);
+    const accumulatorTaskType = `streamAccumulator:${campaignType}`;
+    await unsheduleTask(accumulatorTaskType, campaignId);
+    const snapshotTaskType = `streamSnapshot:${campaignType}`;
+    await unsheduleTask(snapshotTaskType, campaignId);
 }
 
-export async function streamEntry<TEntryData>(streamId: string, data: TEntryData): Promise<IStreamEntry<TEntryData>> {
-    const insertResult = await StreamEntry.insert<any>({streamId, data});
-    const id = insertResult.raw[0].id;
-    return {id, data};
+export async function createSnapshot<TAccumulationData>(campaignType: string, campaignId: string) {
+    logger.info(`Creating stream snapshot ${campaignId}`);
+    const snapshotTaskType = `streamSnapshot:${campaignType}`;
+
+    if (!(await hasTask(`streamAccumulator:${campaignType}`, campaignId))) {
+        logger.info(`Stream accumulator for ${campaignType} ${campaignId} stopped - unscheduling snapshot`);
+        await unsheduleTask(snapshotTaskType, campaignId);
+        return;
+    }
+
+    const {state} = await CampaignState.findOneByOrFail({campaignId});
+    const {data, index} = state as IStreamCampaignState<TAccumulationData>;
+
+    await StreamSnapshot.insert({streamId: campaignId, accumulationIndex: index, data: data as any});
+
+    const nextSnapshotTime = getNextCronTimestamp(getTool(campaignType).snapshotCron!);
+    await setTaskTimestamp(snapshotTaskType, campaignId, nextSnapshotTime);
+}
+
+export async function generateReport<TAccumulationData>(
+    campaignId: string,
+    time: number,
+): Promise<{
+    data: TAccumulationData;
+    time: number;
+}> {
+    logger.info(`Generating stream report ${campaignId}`);
+    const date = new Date(time);
+
+    const {type, config} = await Campaign.findOneByOrFail({campaignId});
+    const {accumulator} = getTool(type);
+
+    if (!accumulator) {
+        throw new Exception(`Campaign type ${type} is stream campaign and doesn't provide reports generation`);
+    }
+
+    const replicaManager = getConnection("replica").manager;
+    const snapshot = await replicaManager.findOne(StreamSnapshot, {
+        where: {
+            streamId: campaignId,
+            createdAt: LessThanOrEqual(date),
+        },
+        order: {
+            createdAt: "DESC",
+        },
+    });
+
+    if (!snapshot) {
+        throw new Exception(`Could not find a stream ${type} ${campaignId} snapshot from before the date ${date}`);
+    }
+
+    const lastEntry = await replicaManager.findOne(StreamEntry, {
+        where: {
+            streamId: campaignId,
+            createdAt: LessThanOrEqual(date),
+        },
+        order: {
+            createdAt: "DESC",
+        },
+    });
+
+    if (!lastEntry) {
+        logger.info(`No entries in a stream ${type} ${campaignId} snapshot from before the date ${date} (returning snapshot)`);
+        return {data: snapshot.data as TAccumulationData, time: snapshot.createdAt.getTime()};
+    }
+
+    time = lastEntry.createdAt.getTime();
+    const entries = await replicaManager.find<any>(StreamEntry, {
+        where: {
+            streamId: campaignId,
+            processed: true,
+            accumulationIndex: MoreThan(snapshot.accumulationIndex),
+            id: LessThanOrEqual(lastEntry.id),
+        },
+        order: {id: "ASC"},
+    });
+
+    const {data} = await accumulator({
+        config,
+        entries,
+        latestAccumulationData: snapshot.data,
+        time,
+    });
+
+    return {data, time};
 }

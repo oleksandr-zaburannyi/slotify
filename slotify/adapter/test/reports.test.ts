@@ -219,6 +219,8 @@ describe("reports", () => {
                         category
                         campaignType
                         campaignId
+                        walletCampaignId
+                        campaignData
                         balanceAfter
                         operator
                         brand

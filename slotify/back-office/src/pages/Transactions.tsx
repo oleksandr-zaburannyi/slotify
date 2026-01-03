@@ -9,6 +9,7 @@ import env from "../lib/env";
 import IpAddress from "../components/IpAddress";
 import Currency from "../components/Currency";
 import {campaignTypes} from "./promo/campaignTypes";
+import JsonView from "react18-json-view";
 
 const Transactions = () => {
     const initialValues = {convert: false};
@@ -84,6 +85,8 @@ const Transactions = () => {
             render: (type: string) => (campaignTypes[type] ? campaignTypes[type].name : type),
         },
         {title: "Campaign Id", dataIndex: "campaignId", sorter: true, ...tableFilter("EQUAL"), render: (campaignId: string) => <Link to={`/campaigns/${campaignId}`}>{campaignId}</Link>},
+        {title: "Wallet Campaign Id", dataIndex: "walletCampaignId", sorter: true, ...tableFilter("EQUAL")},
+        {title: "Campaign Data", dataIndex: "campaignData", render: (data: any) => data && <JsonView collapsed={true} enableClipboard={false} src={data} />},
         {title: "IP", dataIndex: "ip", sorter: true, ...tableFilter("EQUAL"), render: (ip?: string) => <IpAddress ip={ip} />},
         {title: "Score", dataIndex: "verificationScore", sorter: true, render: (value: any) => value !== null && <span style={{fontFamily: "monospace"}}>{value} points</span>},
         {

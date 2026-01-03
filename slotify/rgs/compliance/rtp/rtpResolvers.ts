@@ -26,8 +26,8 @@ export async function addRtpMonitoring(data: RtpMonitoring) {
         ...data,
         calculus: initialSamplesLog,
         sampleCount: combinedStatistics.count,
-        sampleRtp: combinedStatistics.mean,
-        sampleVariance: combinedStatistics.variance,
+        sampleRtp: combinedStatistics.mean != null ? combinedStatistics.mean : null,
+        sampleVariance: combinedStatistics.variance != null ? combinedStatistics.variance : null,
         sampleMarginOfError: marginOfError,
     }).save();
 }
@@ -60,7 +60,7 @@ export async function calculateRtps() {
                 sampleMarginOfError: marginOfError,
             };
 
-            if (shouldSendEmail(rtpMonitoring, statistics.mean, marginOfError)) {
+            if (shouldSendEmail(rtpMonitoring, statistics.count, statistics.mean, marginOfError)) {
                 emailBuilder.appendRtpMonitoring(rtpMonitoring, statistics, marginOfError!);
             }
 
@@ -73,13 +73,16 @@ export async function calculateRtps() {
     emailBuilder.trySend();
 }
 
-function shouldSendEmail(rtpMonitoring: RtpMonitoring, newMean?: number, marginOfError?: number) {
+const relevantRtpMonitoringSample = process.env.RELEVANT_RTP_MONITORING_SAMPLE ? parseInt(process.env.RELEVANT_RTP_MONITORING_SAMPLE) : 100;
+
+function shouldSendEmail(rtpMonitoring: RtpMonitoring, newSampleCount: number, newMean?: number, marginOfError?: number) {
+    const isSampleCountRelevant = newSampleCount > relevantRtpMonitoringSample;
     const wasMismatchBefore = isMismatch(rtpMonitoring.declaredRtp, rtpMonitoring.sampleRtp, rtpMonitoring.sampleMarginOfError);
     const isMismatchNow = isMismatch(rtpMonitoring.declaredRtp, newMean, marginOfError);
 
-    return !wasMismatchBefore && isMismatchNow;
+    return isSampleCountRelevant && !wasMismatchBefore && isMismatchNow;
 }
 
-function isMismatch(declaredRtp: number, sampleRtp?: number, sampleMarginOfError?: number) {
+function isMismatch(declaredRtp: number, sampleRtp?: number | null, sampleMarginOfError?: number | null) {
     return sampleRtp != null && sampleMarginOfError != null && (declaredRtp < sampleRtp - sampleMarginOfError || declaredRtp > sampleRtp + sampleMarginOfError);
 }

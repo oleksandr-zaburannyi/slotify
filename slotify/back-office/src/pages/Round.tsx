@@ -48,6 +48,7 @@ const Rounds = () => {
                     data
                     state
                     params
+                    promo
                     next
                     auto
                 }
@@ -307,6 +308,12 @@ const Rounds = () => {
             render: (data: any) => <JsonLink data={data} />,
         },
         {
+            title: "Promo",
+            dataIndex: "promo",
+            key: "promo",
+            render: (promo: any) => <JsonLink data={promo} />,
+        },
+        {
             title: "Auto",
             dataIndex: "auto",
             key: "auto",
@@ -334,7 +341,49 @@ const Rounds = () => {
         {title: "Created at", dataIndex: "createdAt", render: (createdAt: string) => new Date(parseInt(createdAt)).toLocaleString(), ellipsis: {}},
         {title: "Player Id", dataIndex: "playerId", key: "playerId", render: (value: any) => value},
         {title: "Draw Win Id", dataIndex: "drawWinId", key: "drawWinId", render: (value: any) => value},
-        {title: "Status", dataIndex: "status", key: "status", render: (value?: string) => value && <StatusTag status={value} />},
+        {
+            title: "Status",
+            key: "status",
+            render: ({status, drawWinId}: any) =>
+                status && (
+                    <>
+                        <StatusTag status={status} />
+
+                        {state?.account?.permissions?.includes("closeTransaction") && ["unpaid", "finishing", "started"].includes(status) && (
+                            <Button
+                                onClick={() =>
+                                    Modal.confirm({
+                                        title: "DrawWin status change",
+                                        content: "Are you sure you want to pay this Draw Win?",
+                                        onOk: () => {
+                                            return new Promise((resolve, reject) => {
+                                                fetcher([
+                                                    gql`
+                                                        mutation ($drawWinId: ID!) {
+                                                            payDrawWin(drawWinId: $drawWinId)
+                                                        }
+                                                    `,
+                                                    {drawWinId},
+                                                ])
+                                                    .then(() => {
+                                                        message.success("DrawWin closed successfully");
+                                                        drawsData.mutate();
+                                                        resolve(false);
+                                                    })
+                                                    .catch(() => {
+                                                        reject();
+                                                    });
+                                            });
+                                        },
+                                    })
+                                }
+                            >
+                                Pay Draw Win
+                            </Button>
+                        )}
+                    </>
+                ),
+        },
         {title: "Amount", dataIndex: "amount", key: "amount", render: (value: number) => <Currency currency={summary.currency} amount={value} />},
     ];
 

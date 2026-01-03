@@ -17,6 +17,8 @@ import {ISettingsFilter, Settings} from "../db/model/Settings";
 import {DrawRngState, getDrawRngState, updateRngHashCursor} from "../util/provablyFairMultiplayerUtil";
 import {getServiceUrl} from "@slotify/shared/lib/urls";
 import {SystemCommand} from "../db/model/SystemCommand";
+import {lock} from "@slotify/shared/lib/lock";
+import Exception from "@slotify/shared/lib/Exception";
 
 registerSchedulerCallback("multiplayer", tick, {parallelTasksLimit: 1000});
 
@@ -221,7 +223,7 @@ async function payWins(room: Room, draw: Draw, wins?: {[roundId: string]: number
             select: ["playerId"],
         });
 
-        drawWinsData.push({playerId, amount, tickId: draw.tickId, status: "finishing" as const, roundId, drawId: draw.drawId});
+        drawWinsData.push({playerId, amount, tickId: draw.tickId, status: "unpaid" as const, roundId, drawId: draw.drawId});
     }
 
     const drawWins = await DrawWin.save(drawWinsData);
@@ -238,6 +240,8 @@ async function payWins(room: Room, draw: Draw, wins?: {[roundId: string]: number
 export async function payDrawWin(drawWin: DrawWin, {provider, game, variant}: Room, retry: number | null) {
     const rgsTransactionId = formatDrawWinRgsTransactionId(drawWin.drawWinId);
     const drawWinId = drawWin.drawWinId;
+
+    if (!(await lock(`payDrawWin-lock:${drawWinId}`, 60000))) throw new Exception("DrawWin payment in progress");
 
     try {
         const command = await Command.findOneOrFail({where: {roundId: drawWin.roundId, withdrawalStatus: "finished", bet: Not(IsNull())}, order: {id: "ASC"}});

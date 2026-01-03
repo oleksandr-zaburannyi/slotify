@@ -1,27 +1,24 @@
 locals {
   _services = merge({
-    "adapter" : {
+    "adapter" : merge({
       enabled = lookup(var.versions, "adapter", false)
-      image = "${var.container-registry}/slotify/adapter:${lookup(var.versions, "adapter", "")}"
+      image = "${var.container-registry}/${var.container-registry-repository}/adapter:${lookup(var.versions, "adapter", "")}"
       requests = { cpu = "500m", memory = "256Mi" }
       limits = { memory = "512Mi" }
       metrics_enabled = true
       env-vars = merge({
         DEFAULT_RGS = var.rgs-name
         ADAPTER_RGS_KEY = random_password.rgs_key.result
-        API_BLOCKED_COUNTRIES = join(",", var.api-blocked-countries)
-        GEO_IP_BLOCKED_STATES = join(",", var.geoip-blocked-states)
-        IPGEOLOCATION_API_KEY = var.ipgeolocation-api-key
         SUPPORT_EMAIL = var.support-email
         FUTURE_ANTHEM_API_URL = var.future-anthem.api-url
         FUTURE_ANTHEM_API_KEY = var.future-anthem.api-key
         FUTURE_ANTHEM_EVENT_PREFIX = var.future-anthem.event-prefix
         ANONYMISE_IPS = var.anonymise-ips
       }, lookup(var.env-vars, "adapter", {}))
-    }
-    "adapter-graphql" : {
+    }, lookup(var.service-overrides, "adapter", {}))
+    "adapter-graphql" : merge({
       enabled = lookup(var.versions, "adapter", false)
-      image = "${var.container-registry}/slotify/adapter:${lookup(var.versions, "adapter", "")}"
+      image = "${var.container-registry}/${var.container-registry-repository}/adapter:${lookup(var.versions, "adapter", "")}"
       requests = { cpu = "400m", memory = "256Mi" }
       limits = { cpu = "600m", memory = "1024Mi" }
       metrics_enabled = true
@@ -31,32 +28,33 @@ locals {
         ADAPTER_RGS_KEY = random_password.rgs_key.result
         SUPPORT_EMAIL = var.support-email
         GRAPHQL_ENDPOINTS = "http://rgs/graphql${contains(keys(var.versions), "promo") ? ",http://promo/graphql" : ""}${contains(keys(var.versions), "rng") ? ",http://rng/graphql" : ""}"
+        ANONYMISE_IPS = var.anonymise-ips
       }, lookup(var.env-vars, "adapter-graphql", {}))
-    }
-    "promo" : {
+    }, lookup(var.service-overrides, "adapter-graphql", {}))
+    "promo" : merge({
       enabled = lookup(var.versions, "promo", false)
-      image = "${var.container-registry}/slotify/promo:${lookup(var.versions, "promo", "")}"
+      image = "${var.container-registry}/${var.container-registry-repository}/promo:${lookup(var.versions, "promo", "")}"
       requests = { cpu = "500m", memory = "256Mi" },
       limits = { memory = "512Mi" },
       metrics_enabled = true
-      env-vars : merge({
+      env-vars = merge({
         ADAPTER_RGS_KEY = random_password.rgs_key.result
         RGS = var.rgs-name
       }, lookup(var.env-vars, "promo", {}))
-    },
-    "demo-casino" : {
+    }, lookup(var.service-overrides, "promo", {})),
+    "demo-casino" : merge({
       enabled = lookup(var.versions, "demo-casino", false)
-      image = "${var.container-registry}/slotify/demo-casino:${lookup(var.versions, "demo-casino", "")}"
+      image = "${var.container-registry}/${var.container-registry-repository}/demo-casino:${lookup(var.versions, "demo-casino", "")}"
       requests = { cpu = "300m", memory = "128Mi" }
       limits = { memory = "256Mi" }
       metrics_enabled = true
       env-vars = merge({
         SECRET_KEY = "demo-secret"
       }, lookup(var.env-vars, "demo-casino", {}))
-    },
-    "back-office" : {
+    }, lookup(var.service-overrides, "demo-casino", {})),
+    "back-office" : merge({
       enabled = lookup(var.versions, "back-office", false)
-      image = "${var.container-registry}/slotify/back-office:${lookup(var.versions, "back-office", "")}"
+      image = "${var.container-registry}/${var.container-registry-repository}/back-office:${lookup(var.versions, "back-office", "")}"
       requests = { cpu = "50m", memory = "96Mi" }
       limits = { memory = "128Mi" }
       metrics_enabled = false
@@ -71,10 +69,10 @@ locals {
         VITE_IS_PRODUCTION = var.is-production
         ALLOW_HTTP = var.allow-http
       }, lookup(var.env-vars, "back-office", {}))
-    },
-    "rgs" : {
+    }, lookup(var.service-overrides, "back-office", {})),
+    "rgs" : merge({
       enabled = lookup(var.versions, "rgs", false)
-      image = "${var.container-registry}/slotify/rgs:${lookup(var.versions, "rgs", "")}"
+      image = "${var.container-registry}/${var.container-registry-repository}/rgs:${lookup(var.versions, "rgs", "")}"
       requests = { cpu = "500m", memory = "512Mi" }
       limits = { memory = "1024Mi" }
       metrics_enabled = true
@@ -84,10 +82,10 @@ locals {
         RGS = var.rgs-name
         SUPPORT_EMAIL = var.support-email
       }, lookup(var.env-vars, "rgs", {}))
-    },
-    "websocket" : {
+    }, lookup(var.service-overrides, "rgs", {})),
+    "websocket" : merge({
       enabled = lookup(var.versions, "websocket", false)
-      image = "${var.container-registry}/slotify/websocket:${lookup(var.versions, "websocket", "")}"
+      image = "${var.container-registry}/${var.container-registry-repository}/websocket:${lookup(var.versions, "websocket", "")}"
       requests = { cpu = "300m", memory = "256Mi" }
       limits = { memory = "512Mi" }
       metrics_enabled = true
@@ -95,32 +93,32 @@ locals {
       timeout = 60 * 60 * 24
       env-vars = merge({
       }, lookup(var.env-vars, "websocket", {}))
-    },
-    "rng" : {
+    }, lookup(var.service-overrides, "websocket", {})),
+    "rng" : merge({
       enabled = lookup(var.versions, "rng", false)
-      image = "${var.container-registry}/slotify/rng:${lookup(var.versions, "rng", "")}"
+      image = "${var.container-registry}/${var.container-registry-repository}/rng:${lookup(var.versions, "rng", "")}"
       requests = { cpu = "300m", memory = "128Mi" }
       limits = { cpu = "300m", memory = "256Mi" }
       metrics_enabled = true
       env-vars = merge({
       }, lookup(var.env-vars, "rng", {}))
-    },
+    }, lookup(var.service-overrides, "rng", {})),
   }, {
-    for game, version in lookup(var.versions, "game-servers", lookup(var.versions, "games", {})) : "games-${game}" => {
+    for game, version in lookup(var.versions, "game-servers", lookup(var.versions, "games", {})) : "games-${game}" => merge({
       enabled = true
       remove-secrets = true
-      image = "${var.container-registry}/slotify/games/${game}:${version}"
+      image = "${var.container-registry}/${var.container-registry-repository}/games/${game}:${version}"
       requests = { cpu = "250m", memory = "256Mi" }
       limits = { memory = "512Mi" }
       metrics_enabled = false
       env-vars = merge({
       }, lookup(lookup(var.env-vars, "game-servers", lookup(var.env-vars, "games", {})), game, {}))
-    }
+    }, lookup(lookup(var.service-overrides, "game-servers", lookup(var.service-overrides, "games", {})), game, {}))
   })
-  services = {for k, v in local._services : k => v if v["enabled"] != false}
+  services = {for k, v in local._services : k => v if lookup(v, "enabled", true) != false}
 
 
-  paths = {
+  paths = merge({
     "/*" = "rgs"
     "/game/*" = "rgs"
     "/authenticate" = "rgs"
@@ -151,7 +149,7 @@ locals {
     "/theme/*" = "promo"
 
     "/fairness/*" = "rng"
-  }
+  }, var.path-overrides)
 }
 
 data "google_client_config" "default" {}
@@ -311,7 +309,7 @@ resource "kubernetes_deployment" "deployment" {
             limits = can(each.value["limits"]) ? each.value["limits"] : {}
           }
           dynamic env_from {
-            for_each = can(each.value["remove-secrets"]) ? ["mail-secret"] : ["secret", "mail-secret"]
+            for_each = lookup(each.value, "remove-secrets", false) ? ["mail-secret"] : ["secret", "mail-secret"]
             iterator = name
             content {
               secret_ref {
@@ -402,6 +400,12 @@ resource "kubernetes_manifest" "backend-config" {
       namespace = kubernetes_namespace.app-namespace.metadata[0].name
     }
     spec = {
+      customRequestHeaders = {
+        headers = [
+          "X-IP-Country: {client_region}",
+          "X-IP-Region: {client_region_subdivision}"
+        ]
+      }
       securityPolicy = {
         name = var.security-policy-disable ? "" : join("", google_compute_security_policy.policy[*].name)
       }
@@ -450,7 +454,7 @@ resource "kubernetes_ingress_v1" "ingress" {
 
 resource "null_resource" "copy_connector" {
   triggers = {
-    id = "${var.container-registry}/slotify/connector:${var.versions.connector}"
+    id = "${var.container-registry}/${var.container-registry-repository}/connector:${var.versions.connector}"
   }
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -459,7 +463,7 @@ resource "null_resource" "copy_connector" {
       echo $CR_PAT | docker login ${var.container-registry} -u ${var.container-registry-user} --password-stdin
 
       mkdir temp-connector
-      docker create --name temp-connector --platform linux/amd64 ${var.container-registry}/slotify/connector:${var.versions.connector} || exit 1
+      docker create --name temp-connector --platform linux/amd64 ${var.container-registry}/${var.container-registry-repository}/connector:${var.versions.connector} || exit 1
       docker cp temp-connector:/usr/src/slotify/connector/lib/. temp-connector/.
       docker rm temp-connector
 
@@ -480,7 +484,7 @@ resource "null_resource" "copy_game_clients" {
       export CR_PAT=${var.container-registry-password}
       echo $CR_PAT | docker login ${var.container-registry} -u ${var.container-registry-user} --password-stdin
 
-      docker create --name temp-game-clients ${var.container-registry}/slotify/game-clients/${each.key}:${each.value} || exit 1
+      docker create --name temp-game-clients ${var.container-registry}/${var.container-registry-repository}/game-clients/${each.key}:${each.value} || exit 1
       docker cp temp-game-clients:/dist temp-game-clients
       docker rm temp-game-clients
 

@@ -8,6 +8,10 @@ COPY . .
 
 RUN npm ci --omit=dev
 RUN npm run build
+RUN npm run delete-source
+
+ARG OBFUSCATE=true
+RUN if [ "$OBFUSCATE" = "true" ]; then npm run obfuscate; fi
 
 EXPOSE 8080
 

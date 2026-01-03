@@ -86,10 +86,15 @@ export function getPrometheusRegistry() {
 }
 
 export const metricsMiddleware = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    const ignorePaths: RegExp[] = [/^\/api\/.*$/, /^\/wallet\/.*$/, /^\/rgs\/.*$/, /^\/campaigns\/.*$/, /^\/feed\/.*$/, /^\/event\/.*$/, /^\/theme\/.*$/];
+    const route: string = req.route?.path || req.path;
+    if (ignorePaths.some(ignoredPath => ignoredPath.test(route))) {
+        return next();
+    }
+
     const startTime = new Date().getTime();
     res.on("finish", () => {
         const latency = (new Date().getTime() - startTime) / 1000;
-        const route = req.route?.path || req.path;
         const isInternalRequest = isInternal(req);
         httpMetrics.updateHttpRequestsCounter(route, req.method, res.statusCode, isInternalRequest);
         httpMetrics.updateHttpRequestLatencyHistogram(latency, route, isInternalRequest);

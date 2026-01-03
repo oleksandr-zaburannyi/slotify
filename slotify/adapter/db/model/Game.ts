@@ -25,11 +25,11 @@ export class Game extends BaseEntity {
         return {title: details.title, provider: details.provider, rgs: details.rgs, rgsConfig: details.rgsConfig};
     }
 
-    static async verify(game: string, wallet: string, operator: string, brand?: string) {
+    static async verify(game: string, wallet?: string, operator?: string, brand?: string) {
         const item = (await this.allGames()).find(item => item.game === game);
         if (!item) return false;
-        if (item.wallets && !item.wallets.includes(wallet)) return false;
-        if (item.operators && !item.operators.includes(operator)) return false;
+        if (wallet && item.wallets && !item.wallets.includes(wallet)) return false;
+        if (operator && item.operators && !item.operators.includes(operator)) return false;
         if (brand && item.brands && !item.brands.includes(brand)) return false;
 
         return true;

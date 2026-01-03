@@ -89,16 +89,12 @@ locals {
                 targetAxis         = "Y1"
                 timeSeriesQuery = {
                   timeSeriesFilter = {
-                    filter = "metric.type=\"prometheus.googleapis.com/http_request_duration_seconds/histogram\" metric.label.\"route\"!=\"/graphql\""
+                    filter = "metric.type=\"prometheus.googleapis.com/http_request_duration_seconds/histogram\" metric.label.\"route\"!=\"/graphql\" metric.label.\"route\"!=\"/fairness/updateClientSeed\""
                     aggregation = {
                       alignmentPeriod    = "60s"
                       perSeriesAligner   = "ALIGN_DELTA"
-                      crossSeriesReducer = "REDUCE_SUM"
+                      crossSeriesReducer = "REDUCE_MEAN"
                       groupByFields      = ["metric.label.\"route\"", "metric.label.\"isInternal\""]
-                    }
-                    secondaryAggregation = {
-                      alignmentPeriod  = "60s"
-                      perSeriesAligner = "ALIGN_PERCENTILE_50"
                     }
                   }
                 }
@@ -125,7 +121,7 @@ locals {
                     aggregation = {
                       alignmentPeriod    = "60s"
                       perSeriesAligner   = "ALIGN_DELTA",
-                      crossSeriesReducer = "REDUCE_PERCENTILE_50",
+                      crossSeriesReducer = "REDUCE_MEAN",
                       groupByFields = [
                         "metric.label.\"env\"",
                         "metric.label.\"wallet\""

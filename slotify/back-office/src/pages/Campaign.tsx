@@ -58,6 +58,7 @@ const Campaign = () => {
                     campaignId
                     createdAt
                     name
+                    walletCampaignId
                     start
                     end
                     optIns
@@ -107,6 +108,7 @@ const Campaign = () => {
         {label: "Status", value: summary?.enabled !== undefined && <StatusTag status={summary?.enabled ? "enabled" : "disabled"} />},
         {label: "Type", value: campaignTypes[summary?.type] ? campaignTypes[summary?.type].name : summary?.type},
         {label: "Name", value: summary?.name},
+        {label: "Wallet Campaign Id", value: summary?.walletCampaignId},
         {label: "Start", value: summary?.start ? new Date(summary?.start).toLocaleString() : ""},
         {label: "End", value: summary?.end ? new Date(summary?.end).toLocaleString() : ""},
         {label: "Opt ins", value: summary?.optIns},

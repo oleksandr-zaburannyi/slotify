@@ -246,6 +246,9 @@ export async function startService(api: Express, defaultPort: number = 8080): Pr
                 services[name] = res;
             }
         }
+        if (status !== StatusCode.OK) {
+            logger.error("[health] One or more services are offline", {services});
+        }
         res.status(status).json(services);
     });
 

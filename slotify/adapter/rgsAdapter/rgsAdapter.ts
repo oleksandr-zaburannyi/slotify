@@ -3,8 +3,7 @@ import {IRgsAdapter} from "./IRgsAdapter";
 import standardRgsAdapter from "./standardRgsAdapter";
 import {Express} from "express";
 import {Rgs} from "../db/model/Rgs";
-import {getIp} from "@slotify/shared/lib/ip";
-import {checkIPWhitelisting} from "../util/ip";
+import {checkIPWhitelisting, getIp} from "@slotify/shared/lib/ip";
 import logger from "@slotify/shared/lib/logger";
 
 const rgsAdapters: {[key: string]: IRgsAdapter} = {
@@ -22,6 +21,7 @@ export async function initRgsApi(api: Express): Promise<void> {
     for (const {id, config, adapter, ips} of rgss) {
         try {
             const rgsAdapter = getRgsAdapter(adapter);
+            // not a typo: `*splat` is Express v5’s syntax for a named catch-all parameter
             api.all(`/rgs/${id}/*splat`, (req, res, next) => {
                 const ip = getIp(req);
                 if (ips && !checkIPWhitelisting(ip, ips)) {

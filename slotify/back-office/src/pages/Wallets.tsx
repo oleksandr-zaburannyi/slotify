@@ -11,6 +11,7 @@ import TagList from "../components/TagList";
 import StatusTag from "../components/StatusTag";
 import {AppModal} from "../App";
 import useGraphQlFetcher from "../lib/useGraphQlFetcher";
+import SelectAutoComplete from "../components/SelectAutoComplete";
 
 const Content = ({wallet}: any) => {
     return (
@@ -129,26 +130,6 @@ const Content = ({wallet}: any) => {
                     </Select.Option>
                 </Select>
             </Form.Item>
-            <Form.Item label="IP blocked" name="ipBlocked" style={{width: "150px"}}>
-                <Select>
-                    <Select.Option value={true} key={"yes"}>
-                        Yes
-                    </Select.Option>
-                    <Select.Option value={false} key={"no"}>
-                        No
-                    </Select.Option>
-                </Select>
-            </Form.Item>
-            <Form.Item label="Geo IP blocked" name="geoIpBlocked" style={{width: "150px"}}>
-                <Select>
-                    <Select.Option value={true} key={"yes"}>
-                        Yes
-                    </Select.Option>
-                    <Select.Option value={false} key={"no"}>
-                        No
-                    </Select.Option>
-                </Select>
-            </Form.Item>
             <Form.Item label="Whitelisted IPs" name="ips">
                 <Select mode={"tags"} open={false} tokenSeparators={[" ", ","]}>
                     {wallet?.ips?.map((value: string) => (
@@ -157,6 +138,15 @@ const Content = ({wallet}: any) => {
                         </Select.Option>
                     ))}
                 </Select>
+            </Form.Item>
+            <Form.Item label="IP Blocked countries" name="ipBlockedCountries">
+                <SelectAutoComplete mode={"tags"} type={"countries"} />
+            </Form.Item>
+            <Form.Item label="IP Blocked regions" name="ipBlockedRegions">
+                <SelectAutoComplete mode={"tags"} type={"regions"} />
+            </Form.Item>
+            <Form.Item label="API Blocked countries" name="apiBlockedCountries">
+                <SelectAutoComplete mode={"tags"} type={"countries"} />
             </Form.Item>
         </>
     );
@@ -176,8 +166,9 @@ const Wallets = () => {
         {title: "Config", dataIndex: "config", render: (data: any) => <JsonView collapsed={true} enableClipboard={false} src={data} />},
         {title: "Inspection config", dataIndex: "inspectionConfig", render: (data: any) => <JsonView collapsed={true} enableClipboard={false} src={data} />},
         {title: "One-time key blocked", dataIndex: "oneTimeKeyBlocked", sorter: true, render: (value: boolean) => <StatusTag status={value.toString()} />},
-        {title: "IP blocked", dataIndex: "ipBlocked", sorter: true, render: (value: boolean) => <StatusTag status={value.toString()} />},
-        {title: "Geo IP blocked", dataIndex: "geoIpBlocked", sorter: true, render: (value: boolean) => <StatusTag status={value.toString()} />},
+        {title: "IP blocked countries", dataIndex: "ipBlockedCountries", sorter: true, render: (values: string[]) => <TagList initialMaxTags={10} tags={values} />},
+        {title: "IP blocked regions", dataIndex: "ipBlockedRegions", sorter: true, render: (values: string[]) => <TagList initialMaxTags={10} tags={values} />},
+        {title: "API blocked countries", dataIndex: "apiBlockedCountries", sorter: true, render: (values: string[]) => <TagList initialMaxTags={10} tags={values} />},
         {title: "Whitelisted IPs", dataIndex: "ips", render: (ips: string[]) => <TagList initialMaxTags={3} tags={ips} />},
         {title: "Parallel transactions", dataIndex: "parallelTransactions", render: (value: string[]) => <StatusTag status={value.toString()} />},
         {
@@ -188,7 +179,16 @@ const Wallets = () => {
                         <EditButton
                             onSuccess={refresh}
                             content={<Content wallet={data} />}
-                            data={{id, ...data, config: JSON.stringify(data.config, null, 2), inspectionConfig: JSON.stringify(data.inspectionConfig, null, 2), ips: data.ips?.length > 0 ? data.ips : undefined}}
+                            data={{
+                                id,
+                                ...data,
+                                config: JSON.stringify(data.config, null, 2),
+                                inspectionConfig: JSON.stringify(data.inspectionConfig, null, 2),
+                                ips: data.ips?.length > 0 ? data.ips : undefined,
+                                ipBlockedCountries: data.ipBlockedCountries?.length > 0 ? data.ipBlockedCountries : undefined,
+                                ipBlockedRegions: data.ipBlockedRegions?.length > 0 ? data.ipBlockedRegions : undefined,
+                                apiBlockedCountries: data.apiBlockedCountries?.length > 0 ? data.apiBlockedCountries : undefined,
+                            }}
                             request={(fetcher, data) =>
                                 fetcher([
                                     gql`
@@ -196,7 +196,18 @@ const Wallets = () => {
                                             editWallet(id: $id, data: $data)
                                         }
                                     `,
-                                    {data: {...data, config: JSON.parse(data.config), inspectionConfig: JSON.parse(data.inspectionConfig), ips: data.ips?.length > 0 ? data.ips : null}, id},
+                                    {
+                                        data: {
+                                            ...data,
+                                            config: JSON.parse(data.config),
+                                            inspectionConfig: JSON.parse(data.inspectionConfig),
+                                            ips: data.ips?.length > 0 ? data.ips : null,
+                                            ipBlockedCountries: data.ipBlockedCountries?.length > 0 ? data.ipBlockedCountries : null,
+                                            ipBlockedRegions: data.ipBlockedRegions?.length > 0 ? data.ipBlockedRegions : null,
+                                            apiBlockedCountries: data.apiBlockedCountries?.length > 0 ? data.apiBlockedCountries : null,
+                                        },
+                                        id,
+                                    },
                                 ])
                             }
                         />
@@ -286,7 +297,17 @@ const Wallets = () => {
                                             addWallet(data: $data)
                                         }
                                     `,
-                                    {data: {...data, config: JSON.parse(data.config), inspectionConfig: JSON.parse(data.inspectionConfig), ips: data.ips?.length > 0 ? data.ips : null}},
+                                    {
+                                        data: {
+                                            ...data,
+                                            config: JSON.parse(data.config),
+                                            inspectionConfig: JSON.parse(data.inspectionConfig),
+                                            ips: data.ips?.length > 0 ? data.ips : null,
+                                            ipBlockedCountries: data.ipBlockedCountries?.length > 0 ? data.ipBlockedCountries : null,
+                                            ipBlockedRegions: data.ipBlockedRegions?.length > 0 ? data.ipBlockedRegions : null,
+                                            apiBlockedCountries: data.apiBlockedCountries?.length > 0 ? data.apiBlockedCountries : null,
+                                        },
+                                    },
                                 ])
                             }
                         />

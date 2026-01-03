@@ -2,7 +2,7 @@ import {describe, test} from "@jest/globals";
 import {accumulateJackpotPools} from "../tools/jackpots/jackpots";
 
 function createEmptyStatistics(latestAccumulationData: any) {
-    return Object.fromEntries(Object.keys(latestAccumulationData.poolAmounts).map(poolName => [poolName, {totalContribution: 0}]));
+    return Object.fromEntries(Object.keys(latestAccumulationData._poolAmounts).map(poolName => [poolName, {totalContribution: 0}]));
 }
 
 describe("jackpots", () => {
@@ -12,8 +12,8 @@ describe("jackpots", () => {
                 "zero",
                 {minor: {reset: 0}},
                 {
-                    poolAmounts: {minor: {amount: 0}},
-                    pendingJackpotWins: {},
+                    _poolAmounts: {minor: {amount: 0}},
+                    _pendingJackpotWins: {},
                 },
                 [{minor: {contribution: 0}}],
                 {minor: {amount: 0}},
@@ -22,8 +22,8 @@ describe("jackpots", () => {
                 "contribute",
                 {minor: {reset: 0}},
                 {
-                    poolAmounts: {minor: {amount: 0}},
-                    pendingJackpotWins: {},
+                    _poolAmounts: {minor: {amount: 0}},
+                    _pendingJackpotWins: {},
                 },
                 [{minor: {contribution: 1}}],
                 {minor: {amount: 1}},
@@ -32,8 +32,8 @@ describe("jackpots", () => {
                 "contribute to positive pool amount",
                 {minor: {reset: 0}},
                 {
-                    poolAmounts: {minor: {amount: 10}},
-                    pendingJackpotWins: {},
+                    _poolAmounts: {minor: {amount: 10}},
+                    _pendingJackpotWins: {},
                 },
                 [{minor: {contribution: 1}}],
                 {minor: {amount: 11}},
@@ -42,8 +42,8 @@ describe("jackpots", () => {
                 "seed contribution",
                 {minor: {reset: 0}},
                 {
-                    poolAmounts: {minor: {seedAmount: 1}},
-                    pendingJackpotWins: {},
+                    _poolAmounts: {minor: {seedAmount: 1}},
+                    _pendingJackpotWins: {},
                 },
                 [{minor: {seedContribution: 0.1}}],
                 {minor: {seedAmount: 1.1}},
@@ -52,8 +52,8 @@ describe("jackpots", () => {
                 "contribution and seed contribution",
                 {minor: {reset: 0}},
                 {
-                    poolAmounts: {minor: {amount: 10, seedAmount: 1}},
-                    pendingJackpotWins: {},
+                    _poolAmounts: {minor: {amount: 10, seedAmount: 1}},
+                    _pendingJackpotWins: {},
                 },
                 [{minor: {contribution: 1, seedContribution: 0.1}}],
                 {minor: {amount: 11, seedAmount: 1.1}},
@@ -62,8 +62,8 @@ describe("jackpots", () => {
                 "multiple pools",
                 {minor: {reset: 0}, major: {reset: 0}},
                 {
-                    poolAmounts: {minor: {amount: 10, seedAmount: 1}, major: {amount: 20, seedAmount: 2}},
-                    pendingJackpotWins: {},
+                    _poolAmounts: {minor: {amount: 10, seedAmount: 1}, major: {amount: 20, seedAmount: 2}},
+                    _pendingJackpotWins: {},
                 },
                 [{minor: {contribution: 1, seedContribution: 0.1}, major: {contribution: 2, seedContribution: 0.2}}],
                 {minor: {amount: 11, seedAmount: 1.1}, major: {amount: 22, seedAmount: 2.2}},
@@ -72,8 +72,8 @@ describe("jackpots", () => {
                 "multiple entries",
                 {minor: {reset: 0}, major: {reset: 0}},
                 {
-                    poolAmounts: {minor: {amount: 10, seedAmount: 1}, major: {amount: 20, seedAmount: 2}},
-                    pendingJackpotWins: {},
+                    _poolAmounts: {minor: {amount: 10, seedAmount: 1}, major: {amount: 20, seedAmount: 2}},
+                    _pendingJackpotWins: {},
                 },
                 [
                     {minor: {contribution: 1, seedContribution: 0.1}, major: {contribution: 2, seedContribution: 0.2}},
@@ -86,8 +86,8 @@ describe("jackpots", () => {
                 "negative entries (cancels) reduce the pool amount",
                 {minor: {reset: 0}, major: {reset: 0}},
                 {
-                    poolAmounts: {minor: {amount: 0, seedAmount: 0}},
-                    pendingJackpotWins: {},
+                    _poolAmounts: {minor: {amount: 0, seedAmount: 0}},
+                    v: {},
                 },
                 [{minor: {contribution: -1, seedContribution: -0.1}}],
                 {minor: {amount: -1, seedAmount: -0.1}},
@@ -96,8 +96,8 @@ describe("jackpots", () => {
                 "jackpot win",
                 {minor: {reset: 0}, major: {reset: 0}},
                 {
-                    poolAmounts: {minor: {amount: 100, seedAmount: 10}},
-                    pendingJackpotWins: {},
+                    _poolAmounts: {minor: {amount: 100, seedAmount: 10}},
+                    _pendingJackpotWins: {},
                 },
                 [{minor: {contribution: 1, seedContribution: 0.1, isJackpotWin: true}}],
                 {minor: {amount: 10.1, seedAmount: 0}},
@@ -106,7 +106,7 @@ describe("jackpots", () => {
             index,
             testName,
             config,
-            {...latestAccumulationData, poolStatistics: createEmptyStatistics(latestAccumulationData)},
+            {...latestAccumulationData, _poolStatistics: createEmptyStatistics(latestAccumulationData)},
             poolsChanges.map((poolsChange: any) => ({
                 id: index,
                 data: {
@@ -118,9 +118,17 @@ describe("jackpots", () => {
             })),
             expectedPoolAmounts,
         ]),
-    )("accumulate jackpot pools case %d: %s", (index: string, testName: string, config, latestAccumulationData, entries, expectedPoolAmounts) => {
-        const {poolAmounts} = accumulateJackpotPools(config, latestAccumulationData, entries);
-        Object.entries(poolAmounts).forEach(([poolName, poolData]) => {
+    )("accumulate jackpot pools case %d: %s", (index: string, testName: string, poolsConfig, latestAccumulationData, entries, expectedPoolAmounts) => {
+        const {_poolAmounts} = accumulateJackpotPools(
+            {
+                poolsConfig,
+                baseCurrency: "eur",
+            },
+            latestAccumulationData,
+            entries,
+            0,
+        );
+        Object.entries(_poolAmounts).forEach(([poolName, poolData]) => {
             if (poolData.amount == null) {
                 expect(expectedPoolAmounts[poolName].amount).toEqual(poolData.amount);
             } else {

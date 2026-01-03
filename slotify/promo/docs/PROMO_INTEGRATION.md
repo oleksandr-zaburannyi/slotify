@@ -198,9 +198,9 @@ will return current player state
 }
 ```
 
-### In-game Jackpot
+### Transaction Jackpot
 
-#### Feed
+#### Campaign Feed
 
 Requesting GET `/feed/campaign/{campaignId}?currency=sek` will return all tiers and their pools
 
@@ -208,6 +208,24 @@ Requesting GET `/feed/campaign/{campaignId}?currency=sek` will return all tiers 
 {
   "mega": 100.233232,
   "mini": 5.0323
+}
+```
+
+#### Player Feed
+
+Requesting GET `/feed/campaign/{campaignId}/{playerId}` will return recently won jackpots per roundId. 
+This can be used to correlate jackpotWin with the round that player has finished.
+
+```json
+{
+  "roundJackpotsWon": {
+    "16d0bd24-e116-4797-8010-09e978628c78": {
+      "pool_0": {
+        "amount": 83.8,
+        "baseCurrencyAmount": 83.8
+      }
+    }
+  }
 }
 ```
 

@@ -8,7 +8,7 @@ import IWalletAdapter, {ISession, IWalletAuthenticate, IWalletTransaction} from 
 import {errorCodes} from "./walletAdapter";
 import {Player} from "../db/model/Player";
 import logger from "@slotify/shared/lib/logger";
-import {cancelCampaign, createCampaign, getAvailableBets, getCampaignByName, getFreeBetsCampaignDetails, getFreeBetsPlayerDetails} from "../util/external";
+import {cancelCampaign, createCampaign, getAvailableBets, getCampaignByName, getFreeBetsCampaignDetails} from "../util/external";
 import {round} from "@slotify/shared/lib/round";
 import {ReportExclusion} from "../db/model/ReportExclusion";
 import {Game} from "../db/model/Game";
@@ -151,7 +151,7 @@ export class AleaWalletAdapter implements IWalletAdapter {
             const sessionId = req.query.sessionId;
             const currency = req.query.currency;
             const country = req.query.country?.toLowerCase();
-            const theme = brand;
+            const theme = operator + "_" + brand;
             const key = mode === "real" ? this.cipher!.encrypt(JSON.stringify({sessionId, timestamp: Date.now()})) : `::${currency.toLowerCase()}::${country}:${brand}:`;
 
             const launchUrl = await launch(mode, {wallet, lobbyUrl, language, game, operator, key, theme}, req);
@@ -437,8 +437,7 @@ export class AleaWalletAdapter implements IWalletAdapter {
 
     async transaction(player: Player, transaction: IWalletTransaction, session: ISession) {
         if (transaction.campaignType === "freeBets") {
-            const campaignPlayerDetails = await getFreeBetsPlayerDetails(transaction.campaignId!, player.id);
-            if (campaignPlayerDetails?.finished) {
+            if (transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) throw new Exception("Couldn't find campaign name");
                 const bonusId = campaign.name.replace(campaignPrefix, "");
@@ -447,7 +446,7 @@ export class AleaWalletAdapter implements IWalletAdapter {
                     id: transaction.transactionId,
                     bonusId,
                     cost: round(campaign.config.amount * campaign.config.bets, 2),
-                    winAmount: campaignPlayerDetails.state.totalWin,
+                    winAmount: transaction.campaignData!.totalWin,
                     currency: session.data.currency,
                     gameCode: transaction.game!,
                     round: {

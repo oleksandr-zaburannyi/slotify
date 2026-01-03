@@ -5,6 +5,7 @@ import {IRandomizationBuilder} from "@slotify/rng/lib/random/createProofBuilder"
 
 export interface IInitRequest {
     time: number;
+    roomId: string;
     config: any;
 }
 

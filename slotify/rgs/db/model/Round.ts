@@ -1,4 +1,4 @@
-import {BaseEntity, Column, CreateDateColumn, Entity, In, LessThan, MoreThanOrEqual, Not, PrimaryColumn, PrimaryGeneratedColumn, UpdateDateColumn} from "typeorm";
+import {BaseEntity, Column, CreateDateColumn, Entity, In, IsNull, LessThan, MoreThanOrEqual, Not, PrimaryColumn, PrimaryGeneratedColumn, UpdateDateColumn} from "typeorm";
 import {Wager} from "./Wager";
 import removeUnderscoredKeys from "@slotify/shared/lib/removeUnderscoredKeys";
 import {getConnection} from "@slotify/shared/lib/dbOptions";
@@ -9,7 +9,8 @@ export class Round extends BaseEntity {
     @PrimaryColumn({type: "uuid"}) roundId!: string;
     @CreateDateColumn({type: "timestamptz"}) createdAt!: Date;
     @UpdateDateColumn({type: "timestamptz"}) updatedAt!: Date;
-    @Column({type: "timestamptz"}) failedAt!: Date;
+    @Column({type: "timestamptz", nullable: true}) failedAt?: Date;
+    @Column({type: "timestamptz", nullable: true}) completedAt?: Date;
     @PrimaryColumn({type: "uuid"}) playerId!: string;
     @Column() status!: "started" | "finished" | "unpaid" | "failed" | "cancelled";
     @Column() provider?: string;
@@ -29,16 +30,32 @@ export class Round extends BaseEntity {
         return round;
     }
 
-    static async getStartedFromUser(status: Round["status"][], playerId: string, provider: string, game: string, expiryThreshold?: Date): Promise<Round[]> {
-        //"force-index-scan" forces using rgs_round_playerId_game_status_createdAt index (instead of "rgs_round_status_createAt_where")
-        return await Round.find({
-            where: {
-                playerId,
-                provider,
-                game,
-                status: In([...status, "force-index-scan"]),
-                updatedAt: expiryThreshold ? MoreThanOrEqual(expiryThreshold) : undefined,
-            },
+    static async getStartedFromUser(playerId: string, provider: string, game: string): Promise<Round[]> {
+        return await Round.findBy({
+            playerId,
+            provider,
+            game,
+            status: "started",
+        });
+    }
+
+    static async getFailedFromUser(playerId: string, provider: string, game: string, expiryThreshold: Date): Promise<Round[]> {
+        return await Round.findBy({
+            playerId,
+            provider,
+            game,
+            status: "failed",
+            failedAt: MoreThanOrEqual(expiryThreshold),
+        });
+    }
+
+    static async getUnpaidFromUser(playerId: string, provider: string, game: string, expiryThreshold: Date): Promise<Round[]> {
+        return await Round.findBy({
+            playerId,
+            provider,
+            game,
+            status: "unpaid",
+            completedAt: MoreThanOrEqual(expiryThreshold),
         });
     }
 
@@ -66,5 +83,10 @@ export class Round extends BaseEntity {
 
     static async fail(roundId: string, failReason: string) {
         await Round.update({roundId}, {status: "failed", failReason, failedAt: new Date()});
+    }
+
+    static async complete(roundId: string): Promise<Round> {
+        await Round.update({roundId, completedAt: IsNull()}, {completedAt: new Date()});
+        return Round.findOneByOrFail({roundId});
     }
 }

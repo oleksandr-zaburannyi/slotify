@@ -182,7 +182,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
 
                 const player = await Player.findOneBy({nativeId, wallet});
 
-                const campaignsData = await getNativePlayerActiveFreeBetsCampaigns(nativeId, "relax");
+                const campaignsData = await getNativePlayerActiveFreeBetsCampaigns(nativeId, this.wallet);
 
                 const freespins = [];
                 for (const campaignData of campaignsData) {
@@ -400,7 +400,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
     }
 
     async transaction(player: Player, transaction: IWalletTransaction, session: ISession): Promise<IWalletBalance> {
-        const txtype = await this.getTransactionType(transaction, player);
+        const txtype = await this.getTransactionType(transaction);
 
         const transactionPayload: any = {
             requestid: v4(),
@@ -457,15 +457,13 @@ export class RelaxWalletAdapter implements IWalletAdapter {
         return transactionResponse.balance != null ? {balance: this.fromRelaxMoney(transactionResponse.balance)} : await this.balance(player, transaction.provider!, transaction.game!, session);
     }
 
-    private async getTransactionType(transaction: IWalletTransaction, player: Player): Promise<string> {
+    private async getTransactionType(transaction: IWalletTransaction): Promise<string> {
         if (transaction.campaignType === "freeBets") {
             if (transaction.type === "withdraw") {
                 return "freespinbet";
             }
 
-            const campaignPlayerDetails = await getFreeBetsPlayerDetails(transaction.campaignId!, player.id);
-            const campaignDetails = await getFreeBetsCampaignDetails(transaction.campaignId!);
-            if (campaignPlayerDetails!.state.used < campaignDetails!.config.bets) {
+            if (transaction.campaignData!.used < transaction.campaignData!.total) {
                 return "freespinpayout";
             }
 
@@ -487,7 +485,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             throw new Exception("Skipping Relax initial cancel due to integration requirements", {data: {transactionEntity}});
         }
 
-        const txtype = await this.getTransactionType(transaction, player);
+        const txtype = await this.getTransactionType(transaction);
 
         const transactionPayload = {
             requestid: v4(),

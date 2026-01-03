@@ -14,7 +14,6 @@ import {RoundArchive} from "../db/model/RoundArchive";
 import {WagerArchive} from "../db/model/WagerArchive";
 import {closeRedis} from "@slotify/shared/lib/redis";
 import {stopScheduler} from "@slotify/shared/lib/scheduler";
-import archive from "../route/archive";
 import {invalidate} from "@slotify/shared/lib/cache";
 import wait from "@slotify/shared/lib/wait";
 import {stopIntervals} from "../util/metrics";
@@ -618,9 +617,12 @@ describe("api", () => {
     });
 
     test("currencyDecimals", async () => {
+        invalidate("currency");
+        await wait(100);
         await Currency.insert({currency: "myprize-sc", fixedRate: 1, decimals: 2, symbol: "SC"});
 
-        const res = await request(api).get("/currencyDecimals").expect(200);
+        const {token} = await authenticate();
+        const res = await request(api).get("/currencyDecimals").auth(token, {type: "bearer"}).expect(200);
         Object.entries(res.body).forEach(([currency, decimal]) => {
             expect(typeof currency).toBe("string");
             expect(Number.isInteger(decimal)).toEqual(true);
@@ -781,7 +783,9 @@ describe("api", () => {
         await Round.update({roundId: play3.roundId}, {createdAt: oneYearAgo});
 
         //start archiving
-        await archive();
+        const {archiveSinglePlayer, archiveMultiplayer} = await import("../route/archive");
+        await archiveSinglePlayer();
+        await archiveMultiplayer();
 
         expect((await RoundArchive.find({})).map(r => r.roundId)).toEqual([play1.roundId]);
         expect((await WagerArchive.find({})).map(r => r.roundId)).toEqual([play1.roundId]);

@@ -174,6 +174,7 @@ describe("standard wallet adapter", () => {
             transactionId: expect.any(String),
             type: "deposit",
             amount: 100.01,
+            currency: "sek",
             playerId,
             roundId,
         });
@@ -271,6 +272,7 @@ describe("standard wallet adapter", () => {
             transactionId: expect.any(String),
             type: "withdraw",
             amount: 100.01,
+            currency: "sek",
             playerId,
             roundId,
         });

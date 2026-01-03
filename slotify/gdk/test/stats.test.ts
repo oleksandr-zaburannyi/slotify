@@ -15,7 +15,9 @@ import RTPDampener from "../stats/RTPDampener";
 import TimesWin from "../stats/TimesWin";
 import Variance from "../stats/Variance";
 
-jest.mock("@slotify/rng/lib/verify", () => ({verify: jest.requireActual("@slotify/rng/lib/verify").verify, setPeriodicVerification: jest.fn, setBackgroundCycling: jest.fn}));
+jest.mock("@slotify/rng/lib/verify", () => ({verify: jest.requireActual("@slotify/rng/lib/verify").verify, setPeriodicVerification: jest.fn}));
+jest.mock("@slotify/rng/lib/cycle", () => ({cycle: jest.requireActual("@slotify/rng/lib/cycle").cycle, setBackgroundCycling: jest.fn}));
+jest.mock("@slotify/rng/lib/seed", () => ({seed: jest.requireActual("@slotify/rng/lib/seed").seed, setPeriodicReseeding: jest.fn}));
 
 describe("stats", () => {
     test("average", async () => {

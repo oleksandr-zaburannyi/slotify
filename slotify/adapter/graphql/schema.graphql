@@ -50,6 +50,7 @@ type ReportReceiver {
     email: String
     comment: String
     variables: JSON
+    sftp: JSON
 }
 
 type ReportReceivers {
@@ -62,6 +63,7 @@ input ReportReceiverInput {
     report: String!
     email: String!
     comment: String
+    sftp: JSON
     variables: JSON
 }
 
@@ -83,7 +85,7 @@ type ReportExclusion {
     reason: String
 }
 
-type ReportExclusion {
+type ReportExclusions {
     meta: Meta
     items: [ReportExclusion]
 }
@@ -167,6 +169,8 @@ type Transaction {
     name: String
     campaignType: String
     campaignId: String
+    walletCampaignId: String
+    campaignData: JSON
     balanceAfter: Float
     winRatio: Float
     operator: String
@@ -385,8 +389,9 @@ type Wallet {
     config: JSONObject
     inspectionConfig: JSONObject
     oneTimeKeyBlocked: Boolean
-    ipBlocked: Boolean
-    geoIpBlocked: Boolean
+    ipBlockedCountries: [String]
+    ipBlockedRegions: [String]
+    apiBlockedCountries: [String]
     parallelTransactions: Boolean
 }
 type Wallets {
@@ -441,8 +446,9 @@ input WalletInput {
     config: JSONObject
     inspectionConfig: JSONObject
     oneTimeKeyBlocked: Boolean
-    ipBlocked: Boolean
-    geoIpBlocked: Boolean
+    ipBlockedCountries: [String]
+    ipBlockedRegions: [String]
+    apiBlockedCountries: [String]
     parallelTransactions: Boolean
 }
 
@@ -513,7 +519,7 @@ type Query {
     currencyAliases(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CurrencyAliases! @auth(permission: "currencyAliases")
     currencyFeeds(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CurrencyFeeds! @auth(permission: "manageCurrencies")
     reportReceivers(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): ReportReceivers! @auth(permission: "reportSender")
-    reportExclusion(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): ReportExclusion! @auth(permission: "reportExclusion")
+    reportExclusion(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): ReportExclusions! @auth(permission: "reportExclusion")
     rgsList: [String] @auth(permission: "*")
     walletList: [String] @auth(permission: "*")
     gameList: [String] @auth(permission: "*")
@@ -550,6 +556,7 @@ type Mutation {
     addCurrencyExchange(data: CurrencyExchangeInput!): ID @auth(permission: "manageCurrencies") @log(variables: true, result: true)
     editCurrencyExchange(id: ID!, data: CurrencyExchangeInput!): Boolean @auth(permission: "manageCurrencies") @log(variables: true, result: true)
     deleteCurrencyExchange(id: ID!): Boolean @auth(permission: "manageCurrencies") @log(variables: true, result: true)
+    importCurrencyAliases(data: String!): ImportResults @auth(permission: "manageCurrencies") @log(variables: true, result: true)
     fetchCurrencies(date: String!): Boolean @auth(permission: "manageCurrencies") @log(variables: true, result: true)
 
     editCurrencyFeed(feed: String!, data: CurrencyFeedInput!): Boolean @auth(permission: "manageCurrencies") @log(variables: true, result: true)
@@ -579,7 +586,8 @@ type Mutation {
     addReportReceiver(data: ReportReceiverInput!): ID @auth(permission: "manageReportSender") @log(variables: true, result: true)
     editReportReceiver(id: ID!, data: ReportReceiverInput!): Boolean @auth(permission: "manageReportSender") @log(variables: true, result: true)
     deleteReportReceiver(id: ID!): Boolean @auth(permission: "manageReportSender") @log(variables: true, result: true)
-    sendReport(id: ID!): Boolean @auth(permission: "manageReportSender") @log(variables: true, result: true)
+    sendReport(id: ID!, timestamp: Float): Boolean @auth(permission: "manageReportSender") @log(variables: true, result: true)
+    downloadReport(id: ID!, timestamp: Float): JSON @auth(permission: "manageReportSender") @log(variables: true, result: true)
 
     addReportExclusion(data: ReportExclusionInput!): ID @auth(permission: "manageReportExclusion") @log(variables: true, result: true)
     editReportExclusion(id: ID!, data: ReportExclusionInput!): Boolean @auth(permission: "manageReportExclusion") @log(variables: true, result: true)

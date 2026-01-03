@@ -23,6 +23,7 @@ interface IPromoTransaction {
 
 interface IPromoTransactionResponse {
     campaignId?: string;
+    walletCampaignId?: string;
     campaignType?: string;
     campaignData?: any;
     callFinished?: boolean;
@@ -33,9 +34,13 @@ interface IPromoTransactionResponse {
 export async function sendToPromo(mode: string, category: string | undefined, transaction: IPromoTransaction): Promise<IPromoTransactionResponse> {
     if (isServiceAvailable("promo") && category !== "promo") {
         const body = JSON.stringify(transaction);
-        const {campaignType, campaignId, campaignData, callFinished, jackpotAmount, data} = await fetchAndParse(`${getServiceUrl("promo")}/api/transaction/${mode}`, {method: "POST", body, headers: {"Content-Type": "application/json"}});
+        const {campaignType, campaignId, walletCampaignId, campaignData, callFinished, jackpotAmount, data} = await fetchAndParse(`${getServiceUrl("promo")}/api/transaction/${mode}`, {
+            method: "POST",
+            body,
+            headers: {"Content-Type": "application/json"},
+        });
         logger.info(`Promo transaction (${mode}) ${transaction.transactionId}`, {campaignType, campaignId});
-        return {campaignId, campaignType, campaignData, callFinished, jackpotAmount, data};
+        return {campaignId, walletCampaignId, campaignType, campaignData, callFinished, jackpotAmount, data};
     }
     return {};
 }

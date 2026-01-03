@@ -1,6 +1,6 @@
 {
     "name": "@slotify/adapter",
-    "version": "3.2.0",
+    "version": "3.4.21",
     "author": "",
     "license": "UNLICENSED",
     "publishConfig": {
@@ -20,9 +20,10 @@
         "test": "jest --runInBand --detectOpenHandles",
         "docs": "npx mdpdf docs/WALLET_INTEGRATION.md; npx mdpdf docs/RGS_INTEGRATION.md; npx mdpdf docs/BACK_OFFICE_API.md; npx mdpdf docs/ADAPTER_GUIDEBOOK.md; npx mdpdf docs/WALLET_INTEGRATION_PROCESS.md",
         "build": "rm -Rf lib/* && tsc && mkdir lib/walletAdapter/softswiss && cp walletAdapter/softswiss/*.xml lib/walletAdapter/softswiss",
+        "delete-source": " find . -type f -name '*.ts' -delete",
         "start": "node lib/index.js",
         "start:dev": "ts-node-dev --transpile-only --exit-child index.ts",
-        "obfuscate": "npx --yes javascript-obfuscator --target=node --options-preset=low-obfuscation --output lib/ lib/ && find . -type f -name '*.ts' -delete"
+        "obfuscate": "npx --yes javascript-obfuscator --target=node --options-preset=low-obfuscation --output lib/ lib/"
     },
     "dependencies": {
         "@graphql-tools/graphql-file-loader": "^8.0.22",
@@ -31,13 +32,14 @@
         "@graphql-tools/stitch": "^9.4.28",
         "@graphql-tools/utils": "^10.9.1",
         "@jest/globals": "^30.0.5",
-        "@slotify/shared": "^2.1.1",
+        "@slotify/shared": "^2.1.11",
         "@types/bcrypt": "^6.0.0",
         "@types/express": "^5.0.3",
         "@types/jest": "^30.0.0",
         "@types/jsonwebtoken": "^9.0.10",
         "@types/luxon": "^3.7.1",
         "@types/node": "^24.1.0",
+        "@types/ssh2-sftp-client": "^9.0.5",
         "@types/supertest": "^6.0.3",
         "@types/uuid": "^10.0.0",
         "@types/xml2js": "^0.4.14",
@@ -54,6 +56,7 @@
         "luxon": "^3.7.1",
         "pg": "^8.16.3",
         "prom-client": "^15.1.3",
+        "ssh2-sftp-client": "^12.0.1",
         "supertest": "^7.1.4",
         "ts-jest": "^29.4.0",
         "typeorm": "^0.3.25",

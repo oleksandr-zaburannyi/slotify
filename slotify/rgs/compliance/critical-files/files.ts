@@ -43,7 +43,7 @@ export async function loadRemoteFileChecksum(url: string) {
         throw new Error("Network response was not ok");
     }
 
-    const fileContent = await response.buffer();
+    const fileContent = await response.text();
     return checksum(fileContent);
 }
 

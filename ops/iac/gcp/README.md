@@ -114,6 +114,52 @@ Upgrading database requires downtime (typically around 20-30 minutes) and manual
 
 If you don't want to do the update you can always overwrite database version via i.e. `database-version=POSTGRES_12`.
 
+## Using a custom registry
+
+By default, terraform scripts pulls images from `ghcr.io` under the `slotify` repository. If you mirror those images to your own registry, update the following variables in your environment `main.tf`:
+
+- `container-registry` – the fully qualified registry host (for example `gcr.io/acme-prod` or `1234567890.dkr.ecr.eu-west-1.amazonaws.com`).
+- `container-registry-repository` – the repository segment appended to the host (defaults to `slotify`).
+
+After setting the variables, mirror the existing images once so every tag is available in your registry:
+
+```bash
+SERVICES=( # use service:tag to pin a specific version; omitting :tag defaults to :latest.
+  adapter
+  back-office
+  connector
+  demo-casino
+  promo
+  rgs
+  rng
+  websocket
+)
+SOURCE_REGISTRY="ghcr.io/tequity/slotify"
+TARGET_REGISTRY="gcr.io/acme-prod/slotify"
+
+docker login ghcr.io
+docker login gcr.io
+
+for entry in "${SERVICES[@]}"; do
+  service="${entry%%:*}"
+  tag="${entry#*:}"
+  [[ "$service" == "$tag" ]] && tag="latest"
+
+  OLD_IMAGE="${SOURCE_REGISTRY}/${service}:${tag}"
+  NEW_IMAGE="${TARGET_REGISTRY}/${service}:${tag}"
+
+  docker pull "$OLD_IMAGE"
+  docker tag "$OLD_IMAGE" "$NEW_IMAGE"
+  docker push "$NEW_IMAGE"
+done
+```
+
+Repeat the pull/tag/push cycle for every image and tag you plan to deploy. Helpful vendor docs on importing or mirroring images from GitHub Container Registry:
+
+- [Google Artifact Registry – Import Docker images](https://cloud.google.com/artifact-registry/docs/docker/migrate)
+- [AWS Elastic Container Registry – Copying images between registries](https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-retag.html)
+- [Azure Container Registry – Import container images](https://learn.microsoft.com/azure/container-registry/container-registry-import-images)
+
 ## Troubleshooting
 
 If you ever encounter the following error, make sure the person has read and write permissions on the cdn bucket (default: `cdn-<project>`) and also the terraform state bucket (default: `tequity-terraform`):

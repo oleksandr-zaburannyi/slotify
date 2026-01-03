@@ -581,21 +581,6 @@ resource "google_compute_security_policy" "policy" {
     }
   }
   rule {
-    action = "allow"
-    priority = 900
-    header_action {
-      request_headers_to_adds {
-        header_name = "ip-blocked-country"
-        header_value = "true"
-      }
-    }
-    match {
-      expr {
-        expression = "'${join(",", var.ip-blocked-countries)}'.contains(origin.region_code)"
-      }
-    }
-  }
-  rule {
     action = "deny(404)"
     priority = 950
     match {
@@ -610,7 +595,7 @@ resource "google_compute_security_policy" "policy" {
     priority = 1000
     match {
       expr {
-        expression = "!request.path.matches('/graphql|/feed|/wallet|/rgs')"
+        expression = "!request.path.matches('/graphql|/feed|/wallet|/rgs') && !'${join("|", var.rate-limiting-excluded-ips)}'.contains(origin.ip)"
       }
     }
     rate_limit_options {

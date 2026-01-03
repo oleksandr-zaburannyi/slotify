@@ -35,6 +35,7 @@ const settings = [
     "gameEnabled",
     "hideCurrencySymbol",
     "useCurrencySymbol",
+    "syncLeftmostBets",
     "defaultCampaignThemeName",
 ];
 

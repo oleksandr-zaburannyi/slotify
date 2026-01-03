@@ -24,7 +24,8 @@ export default async function complete(
 
     if (!(await lock(`complete-lock:${roundId}`, 60000))) throw new Exception("Round completion in progress");
 
-    const round = await Round.findOneByOrFail({roundId});
+    const round = await Round.complete(roundId);
+
     if (!["unpaid", "started"].includes(round.status)) throw new Exception("Round needs to be in unpaid or started state to complete it", {data: {roundId, playerId}});
     if (round.playerId !== playerId) throw new Exception("Incorrect playerId", {data: {roundId, playerId}});
 

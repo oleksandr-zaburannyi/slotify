@@ -13,7 +13,18 @@ import {CampaignLog} from "../db/model/CampaignLog";
 import {cleanupAfterTests} from "./cleanup";
 import {cleanupScheduledTasks} from "../util/scheduleTasks";
 
-jest.mock("@slotify/rng/lib/verify", () => ({verify: (jest.requireActual("@slotify/rng/lib/verify") as any).verify, setPeriodicVerification: jest.fn, setBackgroundCycling: jest.fn}));
+jest.mock("@slotify/rng/lib/verify", () => ({
+    verify: (jest.requireActual("@slotify/rng/lib/verify") as any).verify,
+    setPeriodicVerification: jest.fn,
+}));
+jest.mock("@slotify/rng/lib/cycle", () => ({
+    cycle: (jest.requireActual("@slotify/rng/lib/cycle") as any).cycle,
+    setBackgroundCycling: jest.fn,
+}));
+jest.mock("@slotify/rng/lib/seed", () => ({
+    seed: (jest.requireActual("@slotify/rng/lib/seed") as any).seed,
+    setPeriodicReseeding: jest.fn,
+}));
 jest.mock("../util/routes", () => {
     const original: any = jest.requireActual("../util/routes");
     return {...original, startCheckingCampaigns: jest.fn()};

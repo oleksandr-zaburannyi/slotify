@@ -1,14 +1,12 @@
-import cache from "@slotify/shared/lib/cache";
-import {getConnection} from "@slotify/shared/lib/dbOptions";
 import {Currency} from "../db/model/Currency";
+import {ISettingsFilter} from "../db/model/Settings";
 
-export const currencyDecimals = cache(
-    2 * 60,
-    async () => {
-        return (await getConnection("replica").manager.find(Currency, {select: ["currency", "decimals"]})).reduce((result: Record<string, number>, {currency, decimals}) => {
-            result[currency] = decimals;
-            return result;
-        }, {});
-    },
-    ["currency"],
-);
+export const currencyDecimals = async (filters: ISettingsFilter) => {
+    const result: Record<string, number> = {};
+    const currencies = await Currency.getFixedRates();
+    for (const {currency} of currencies) {
+        const {decimals} = await Currency.getFixedRate(currency, filters);
+        result[currency] = decimals;
+    }
+    return result;
+};

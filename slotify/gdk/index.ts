@@ -11,6 +11,7 @@ import {IMultiplayerGame} from "./IMultiplayerGame";
 import {createRandom} from "@slotify/rng/lib/random/factory";
 import {createMultiplayerRng, createRng} from "./helper/createRng";
 import {createMultiplayerProofBuilder, createProofBuilder} from "@slotify/rng/lib/random/createProofBuilder";
+import {initServices} from "./services";
 
 async function initApi(api: express.Express) {
     if (process.env.STATIC_DIR) {
@@ -187,8 +188,8 @@ async function initApi(api: express.Express) {
         const game = getGame(req.params.game) as IMultiplayerGame;
         if (!game.init) throw new Exception(`Game ${req.params.game} doesn't seem to support multiplayer mode`);
 
-        const {time, config} = req.body;
-        const response = await game.init({time, config}, createRandom());
+        const {time, roomId, config} = req.body;
+        const response = await game.init({time, roomId, config}, createRandom());
 
         res.json({...response});
     });
@@ -262,6 +263,7 @@ async function initApi(api: express.Express) {
 async function init() {
     const {api} = await createService("games", "10mb");
     await initGames();
+    await initServices(api);
     await initApi(api);
     const server = await startService(api);
     return {api, server};

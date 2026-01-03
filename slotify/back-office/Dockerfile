@@ -8,6 +8,7 @@ COPY . .
 
 RUN npm ci --omit=dev
 RUN npm run build
+RUN npm run delete-source
 
 EXPOSE 8080
 

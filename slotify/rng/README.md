@@ -22,7 +22,10 @@ Slotify RNG is a uses selected pseudo RNG algorithm to generate random numbers.
 - `MAIL_PASSWORD`: e-mail password
 - `SLACK_WEBHOOK`: Slack webhook for alerting (https://api.slack.com/messaging/webhooks)
 
-- `RNG_ALGORITHM`: (optional, default `isaac`). RNG algorithm to use. Available: `isaac`, `mersenne-twister`
+- `RNG_CYCLING_INTERVAL`: periodic cycling interval in milliseconds, default 10 minutes 
+- `RNG_CYCLING_LIMIT`: maximum randomizations skipped
+- `RNG_VERIFICATION_INTERVAL`: periodic chi test update interval in milliseconds, default 10 minutes
+- `RNG_RESEEDING_INTERVAL`: time isaac is reseeded in milliseconds, default 24 hours
 
 ## Private NPM dependencies
 

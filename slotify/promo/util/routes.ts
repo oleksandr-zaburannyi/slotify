@@ -32,6 +32,7 @@ export interface ITransactionResponse {
     callFinished?: boolean;
     campaignType?: string;
     campaignId?: string;
+    walletCampaignId?: string;
     campaignData?: any;
     jackpotAmount?: number;
     data?: Record<string, any>;
@@ -144,6 +145,9 @@ export async function campaign(campaignId: string, player: IPlayer) {
     status = await initStarted(campaignId, status, player, tool, config);
     const {loadCampaignState, loadPlayerState} = lazyLoadState(getConnection("primary").manager, campaignId, playerId);
 
+    let campaignState = await loadCampaignState(true);
+    campaignState = tool.accumulator ? {latestAccumulationData: removeUnderscoredKeys(campaignState.latestAccumulationData)} : removeUnderscoredKeys(await loadCampaignState(true));
+
     return {
         campaignId,
         start,
@@ -152,7 +156,7 @@ export async function campaign(campaignId: string, player: IPlayer) {
         name,
         status,
         config: removeUnderscoredKeys(config),
-        campaignState: removeUnderscoredKeys(await loadCampaignState(true)),
+        campaignState,
         playerState: removeUnderscoredKeys(await loadPlayerState(true)),
     };
 }
@@ -287,7 +291,7 @@ export async function transactions(mode: "withdraw" | "deposit" | "withdrawFinis
         const withdrawToCancel = mode === "cancel" ? await CampaignResponse.findOneBy({responseId: "withdraw_" + transactionId}) : null;
 
         await getConnection("primary").transaction(async manager => {
-            for (const {campaignId, tool, config, type, start, end} of campaigns) {
+            for (const {campaignId, walletCampaignId, tool, config, type, start, end} of campaigns) {
                 if (end && end.getTime() < Date.now()) continue;
 
                 const func = tool[mode];
@@ -328,6 +332,7 @@ export async function transactions(mode: "withdraw" | "deposit" | "withdrawFinis
                         if (response.campaignId || response.campaignType) throw new Exception("Couldn't overwrite campaignType and campaignId", {data: {response, campaignId}});
                         response.campaignType = type;
                         response.campaignId = campaignId;
+                        response.walletCampaignId = walletCampaignId;
                     }
                     if (result.campaignData) {
                         if (response.campaignData)

@@ -19,6 +19,7 @@ export class Wager extends BaseEntity {
     @Column({type: "jsonb", nullable: true}) next?: string[];
     @Column({type: "jsonb", nullable: true}) state?: any;
     @Column({type: "jsonb", nullable: true}) params?: any;
+    @Column({type: "jsonb", nullable: true}) promo?: any;
     @Column({}) auto!: boolean;
 
     static async getTotalWin(roundId: string): Promise<number> {

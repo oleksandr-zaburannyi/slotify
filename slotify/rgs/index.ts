@@ -44,6 +44,7 @@ import balance from "./route/balance";
 import {currencyExchangeRates} from "./route/currencyExchangeRates";
 import {initRgsMetrics} from "./util/metrics";
 import {currencySymbols} from "./route/currencySymbols";
+import {ISettingsFilter} from "./db/model/Settings";
 
 async function initApi(api: Express) {
     api.use(async (req, res, next) => {
@@ -66,7 +67,10 @@ async function initApi(api: Express) {
         async (req, res) => {
             const ip = getIp(req);
             const channel = getChannel(req.headers["user-agent"]);
-            res.json(await authenticate(req.body.wallet, req.body.operator, req.body.key, req.body.provider, req.body.game, channel, ip, req.get("ip-blocked-country")));
+            const ipCountry = req.get("X-IP-Country");
+            const ipRegion = req.get("X-IP-Region");
+
+            res.json(await authenticate(req.body.wallet, req.body.operator, req.body.key, req.body.provider, req.body.game, channel, ip, ipCountry, ipRegion));
         },
     );
 
@@ -154,8 +158,9 @@ async function initApi(api: Express) {
         res.json(await games());
     });
 
-    api.get("/currencyDecimals", async (req, res) => {
-        res.json(await currencyDecimals());
+    api.get("/currencyDecimals", auth.verify("player"), async (req, res) => {
+        const filter: ISettingsFilter = res.locals.user as IPlayer;
+        res.json(await currencyDecimals(filter));
     });
 
     api.get("/currencySymbols", async (req, res) => {
@@ -204,8 +209,8 @@ async function initApi(api: Express) {
     });
 
     api.post("/api/websocket/systemConnected", validate([body("channel").isString().exists(), body("systemId").isString().exists(), body("signature").isString().exists()]), async (req, res) => {
-        const {channel, systemId, signature} = req.body;
-        await onSystemConnected(channel, systemId, signature);
+        const {channel, systemId, signature, ip} = req.body;
+        await onSystemConnected(channel, systemId, signature, ip);
         res.json({success: true});
     });
 

@@ -20,7 +20,18 @@ import {CampaignState} from "../db/model/CampaignState";
 import {CampaignPrize} from "../db/model/CampaignPrize";
 import {cleanupAfterTests} from "./cleanup";
 
-jest.mock("@slotify/rng/lib/verify", () => ({verify: (jest.requireActual("@slotify/rng/lib/verify") as any).verify, setPeriodicVerification: jest.fn, setBackgroundCycling: jest.fn}));
+jest.mock("@slotify/rng/lib/verify", () => ({
+    verify: (jest.requireActual("@slotify/rng/lib/verify") as any).verify,
+    setPeriodicVerification: jest.fn,
+}));
+jest.mock("@slotify/rng/lib/cycle", () => ({
+    cycle: (jest.requireActual("@slotify/rng/lib/cycle") as any).cycle,
+    setBackgroundCycling: jest.fn,
+}));
+jest.mock("@slotify/rng/lib/seed", () => ({
+    seed: (jest.requireActual("@slotify/rng/lib/seed") as any).seed,
+    setPeriodicReseeding: jest.fn,
+}));
 
 jest.mock("@slotify/shared/lib/fetch");
 const mockedFetchAndParse = fetchAndParse as jest.MockedFunction<typeof fetchAndParse>;
@@ -573,9 +584,9 @@ describe("api", () => {
             .send(data)
             .expect(200);
         let body = {};
-        if (mode === "withdraw") body = {callFinished: true, jackpotAmount: 100, campaignType: "test-tool", campaignId, campaigns: [campaignId]};
+        if (mode === "withdraw") body = {callFinished: true, jackpotAmount: 100, campaignType: "test-tool", campaignId, campaigns: [campaignId], walletCampaignId: null};
         if (mode === "withdrawFinished") body = {callFinished: false, data: {"test-tool": {d: "withdrawFinished"}}, campaigns: [campaignId]};
-        if (mode === "deposit") body = {callFinished: true, jackpotAmount: 100, campaignType: "test-tool", campaignId, campaigns: [campaignId]};
+        if (mode === "deposit") body = {callFinished: true, jackpotAmount: 100, campaignType: "test-tool", campaignId, campaigns: [campaignId], walletCampaignId: null};
         if (mode === "depositFinished") body = {callFinished: false, data: {"test-tool": {d: "depositFinished"}}, campaigns: [campaignId]};
 
         expect(res1.body).toEqual(body);
@@ -961,6 +972,31 @@ describe("api", () => {
         const campaign = await Campaign.createWithState({name: "test", type: "test-tool", config: {a: 1}});
         const {campaignId, start, end, name, type} = campaign;
         await Campaign.createWithState({name: "test2", type: "test-tool", config: {a: 1}});
+
+        const player = {
+            provider: "my-provider",
+            game: "my-game",
+            playerId: v4(),
+            wallet: "demo",
+            operator: "my-operator",
+            brand: "my-brand",
+            nativeId: "my-native-id",
+            currency: "sek",
+            jurisdiction: "mt",
+        };
+        const token = auth.sign(player, "player");
+
+        const res = await request(api).get("/campaigns?game=my-game&provider=my-provider").auth(token, {type: "bearer"}).expect(200);
+        expect(res.body).toEqual({campaigns: [{campaignId, name, start, end, type, status: "started"}]});
+    });
+
+    test("campaigns - start time priority", async () => {
+        const campaignStart = new Date();
+        campaignStart.setHours(campaignStart.getHours() + 1);
+
+        await Campaign.createWithState({name: "test0", type: "test-tool", config: {a: 1}, start: campaignStart});
+        const visibleCampaign = await Campaign.createWithState({name: "test1", type: "test-tool", config: {a: 1}});
+        const {campaignId, start, end, name, type} = visibleCampaign;
 
         const player = {
             provider: "my-provider",

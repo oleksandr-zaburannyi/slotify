@@ -28,6 +28,7 @@ import {generateHashChain, setRngSeed} from "../util/provablyFairMultiplayerUtil
 import {SelectQueryBuilder} from "typeorm";
 import {getCurrencies} from "../util/adapterUtil";
 import {getInTimezone, getPreviousDayInTimezone} from "@slotify/shared/lib/time";
+import {payDrawWin} from "../multiplayer/tick";
 
 interface IContext {
     account: IAccount;
@@ -104,6 +105,7 @@ export default {
                 {alias: "data", sql: "wager.data", filters: ["NULL", "NOT_NULL"]},
                 {alias: "state", sql: "wager.state", filters: ["NULL", "NOT_NULL"]},
                 {alias: "params", sql: "wager.params", filters: ["NULL", "NOT_NULL"]},
+                {alias: "promo", sql: "wager.promo", filters: ["NULL", "NOT_NULL"]},
                 {alias: "auto", sql: "wager.auto", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
             ];
             return generate(Wager, "wager", [], columns, sort, filter, Math.min(limit, 100), offset);
@@ -245,6 +247,7 @@ export default {
                 {alias: "operators", sql: "room.operators", filters: ["CONTAIN", "LIKE"], type: "json"},
                 {alias: "brands", sql: "room.brands", filters: ["CONTAIN", "LIKE"], type: "json"},
                 {alias: "variant", sql: "room.variant", filters: ["IN", "EQUAL", "LIKE", "NOT_EQUAL"]},
+                {alias: "ips", sql: "room.ips", filters: ["CONTAIN", "LIKE"], type: "json"},
             ];
             const defaultSort: ISort = {field: "createdAt", order: "DESC"};
 
@@ -651,6 +654,13 @@ export default {
         },
         async autoCompleteRound(_: any, {roundId}: {roundId: string}) {
             await autoCompleteRound(roundId);
+            return true;
+        },
+        async payDrawWin(_: any, {drawWinId}: {drawWinId: string}) {
+            const drawWin = await DrawWin.findOneByOrFail({drawWinId});
+            const draw = await Draw.findOneByOrFail({drawId: drawWin.drawId});
+            const room = await Room.findOneByOrFail({roomId: draw.roomId});
+            await payDrawWin(drawWin, room, null);
             return true;
         },
     },

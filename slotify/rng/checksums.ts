@@ -5,7 +5,7 @@ import * as fs from "fs";
 import * as cryptoModule from "crypto";
 
 const files: {[key: string]: string} = {
-    "isaac.js": "06e1860835984ee3415398c3b2ba7f17a2e224dd",
+    "isaac.js": "ce8ff50202880282be16cfb8532882b41eea9d5e",
 };
 
 const getChecksum = function (file: string): string {

@@ -26,6 +26,8 @@ interface IConfig {
     callerPass: string;
     salt: string;
     timeout?: number;
+    operator?: string;
+    hostname?: string;
 }
 
 type Method = "GET" | "POST";
@@ -35,7 +37,7 @@ interface SessionInfo {
     session_id: string;
 }
 
-const operator = "reevo";
+// const operator = "reevo";
 
 export class ReevoWalletAdapter implements IWalletAdapter {
     wallet!: string;
@@ -64,6 +66,9 @@ export class ReevoWalletAdapter implements IWalletAdapter {
             error: 1,
             message,
         };
+    }
+    private get operator() {
+        return this.config.operator || "reevo";
     }
 
     async init(wallet: string, api: Express, path: string, config: IConfig) {
@@ -124,12 +129,13 @@ export class ReevoWalletAdapter implements IWalletAdapter {
                         mode,
                         {
                             wallet: this.wallet,
-                            operator,
+                            operator: this.operator,
                             lobbyUrl,
                             language,
                             game,
                             theme: brand,
                             key,
+                            hostname: config.hostname,
                         },
                         req,
                     );
@@ -166,9 +172,10 @@ export class ReevoWalletAdapter implements IWalletAdapter {
                         "replay",
                         {
                             wallet: this.wallet,
-                            operator,
+                            operator: this.operator,
                             game,
                             roundId,
+                            hostname: config.hostname,
                         },
                         req,
                     );
@@ -227,7 +234,7 @@ export class ReevoWalletAdapter implements IWalletAdapter {
                 // 1. Get bet levels for the game in question
                 const betLevels = await getAvailableBets({
                     wallet: this.wallet,
-                    operator,
+                    operator: this.operator,
                     brand,
                     provider,
                     game,
@@ -245,7 +252,7 @@ export class ReevoWalletAdapter implements IWalletAdapter {
                         wallet: [this.wallet],
                         providers: [provider],
                         games: [game],
-                        operator: [operator],
+                        operator: [this.operator],
                         brands: [brand],
                         nativeIds,
                         config: {bets, currency, amount},

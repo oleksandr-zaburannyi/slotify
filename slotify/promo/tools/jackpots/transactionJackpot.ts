@@ -8,6 +8,7 @@ import {
     deposit,
     depositFinished,
     evaluateJackpotWin,
+    getOrCreatePlayerState,
     IJackpotAccumulationData,
     IJackpotConfig,
     IJackpotEntryData,
@@ -15,6 +16,7 @@ import {
     IJackpotPlayerState,
     IJackpotPoolsChange,
     jackpotScheduledAccumulationInterval,
+    playerFeed,
     sumRoundPoolWins,
     systemEvent,
 } from "./jackpots";
@@ -32,6 +34,7 @@ type ITransactionJackpotConfig = IJackpotConfig<{
 
 export const transactionJackpot: IStreamTool<ITransactionJackpotConfig, IJackpotPlayerState, IJackpotLog, IJackpotEntryData, IJackpotAccumulationData> = {
     autoOptIn: true,
+    snapshotCron: "* * * * *",
 
     create,
 
@@ -40,13 +43,15 @@ export const transactionJackpot: IStreamTool<ITransactionJackpotConfig, IJackpot
     async withdraw({transaction, config, loadPlayerState}) {
         if (transaction.category !== "normal") return;
 
+        const {poolsConfig} = config;
+
         const playerState: IJackpotPlayerState = await loadPlayerState();
         if (playerState && playerState._rounds[transaction.roundId]) {
             throw new Exception("Transaction Jackpot doesn't support side bets", {data: {transaction, playerState}});
         }
 
         let jackpotAmount = 0;
-        for (const {contributionRate, seedContributionRate} of Object.values(config)) {
+        for (const {contributionRate, seedContributionRate} of Object.values(poolsConfig)) {
             const playerCurrencyPoolChange = transaction.amount * contributionRate;
             const playerCurrencySeedChange = transaction.amount * seedContributionRate;
             jackpotAmount = jackpotAmount + playerCurrencyPoolChange + playerCurrencySeedChange;
@@ -58,18 +63,26 @@ export const transactionJackpot: IStreamTool<ITransactionJackpotConfig, IJackpot
     async withdrawFinished({transaction, player, config, loadPlayerState, streamEntry, streamSynchronizedAccumulator}) {
         if (transaction.category !== "normal") return;
 
+        const {poolsConfig, baseCurrency} = config;
+
         const {currency, playerId} = player;
-        const currencyRate = await getCurrencyRate(currency);
+        const currencyRate = await getCurrencyRate(currency, baseCurrency);
         const {roundId, transactionId} = transaction;
 
         const random = createRandom();
 
         const playerCurrencyPoolsChange: IJackpotPoolsChange = {};
-        for (const [poolName, {contributionRate, seedContributionRate, probability}] of Object.entries(config)) {
+        for (const [poolName, {contributionRate, seedContributionRate, probability}] of Object.entries(poolsConfig)) {
             playerCurrencyPoolsChange[poolName] = {
                 contribution: transaction.amount * contributionRate,
                 seedContribution: transaction.amount * seedContributionRate,
             };
+            const target = (probability * transaction.amount) / currencyRate;
+
+            if (target > 1) {
+                logger.error(`The bet amount ${transaction.amount} exceeds target probability and forces instant jackpot trigger`);
+            }
+
             if (random() / 2 ** 32 < (probability * transaction.amount) / currencyRate) {
                 playerCurrencyPoolsChange[poolName].isJackpotWin = true;
             }
@@ -127,6 +140,8 @@ export const transactionJackpot: IStreamTool<ITransactionJackpotConfig, IJackpot
     async cancel({transaction, config, player, loadPlayerState, streamEntry, streamSynchronizedAccumulator}) {
         if (transaction.category !== "normal") return;
 
+        const {poolsConfig} = config;
+
         const playerState = (await loadPlayerState()) ?? {_rounds: {}};
         const roundState = playerState._rounds[transaction.roundId];
 
@@ -150,9 +165,9 @@ export const transactionJackpot: IStreamTool<ITransactionJackpotConfig, IJackpot
 
         const {poolsChange} = roundState;
 
-        const negativePoolsChange = Object.fromEntries(
-            Object.entries(poolsChange!).map(([poolId, poolChange]) => [
-                poolId,
+        const cancelContributionsPoolsChange = Object.fromEntries(
+            Object.entries(poolsChange!).map(([poolName, poolChange]) => [
+                poolName,
                 {
                     contribution: -poolChange.contribution!,
                     seedContribution: -poolChange.seedContribution!,
@@ -161,40 +176,46 @@ export const transactionJackpot: IStreamTool<ITransactionJackpotConfig, IJackpot
             ]),
         );
 
-        const entry = await streamEntry({
-            type: "cancel",
+        const cancelContributionEntry = await streamEntry({
+            type: "cancelContributions",
             playerId: player.playerId,
             roundId: transaction.roundId,
             transactionId: transaction.transactionId,
-            poolsChange: negativePoolsChange,
+            poolsChange: cancelContributionsPoolsChange,
         });
-        logger.info("Canceling transactionJackpot contributions finished", {transaction, entry});
+
+        logger.info("Canceling transactionJackpot contributions finished", {transaction, cancelContributionEntry});
 
         let logs;
         if (roundState.isJackpotWin) {
-            logger.warn("Canceling transactionJackpot win synchronization started", {transaction, playerState, entry});
+            const cancelWinPoolsChange = Object.fromEntries(Object.entries(roundState.totalRoundPoolWins!).map(([poolName, {baseCurrencyAmount}]) => [poolName, {contribution: baseCurrencyAmount - poolsConfig[poolName].reset}]));
+
+            const cancelWinEntry = await streamEntry({
+                type: "cancelWin",
+                playerId: player.playerId,
+                roundId: transaction.roundId,
+                transactionId: transaction.transactionId,
+                poolsChange: cancelWinPoolsChange,
+            });
+
+            logger.warn("Canceling transactionJackpot win synchronization started", {
+                transaction,
+                playerState,
+                cancelContributionEntry,
+                cancelWinEntry,
+            });
             const accumulation = await streamSynchronizedAccumulator(async ({entries, latestAccumulationData, time}) => {
-                const {poolAmounts, poolStatistics} = latestAccumulationData;
+                const data = accumulateJackpotPools(config, latestAccumulationData, entries, time);
 
-                Object.entries(roundState.totalRoundPoolWins!).forEach(([poolName, {baseCurrencyAmount}]) => {
-                    const pool = poolAmounts[poolName];
-                    pool.amount = pool.amount + (baseCurrencyAmount - config[poolName].reset);
-                    const statistics = poolStatistics[poolName];
-                    statistics.winsCount--;
-                    statistics.totalWin -= baseCurrencyAmount;
-                });
-
-                const accumulationData = {...latestAccumulationData, poolAmounts};
-                const data = accumulateJackpotPools(config, accumulationData, entries);
-
-                data.pendingJackpotWins = Object.fromEntries(Object.entries(data.pendingJackpotWins).filter(([, pendingJackpotWin]) => pendingJackpotWin.roundId !== transaction.roundId));
+                data._pendingJackpotWins = Object.fromEntries(Object.entries(data._pendingJackpotWins).filter(([, pendingJackpotWin]) => pendingJackpotWin.roundId !== transaction.roundId));
 
                 return {data, nextAccumulationTime: time + jackpotScheduledAccumulationInterval};
             });
             logger.warn("Cancel transactionJackpot win successful", {
                 transaction,
                 playerState,
-                entry,
+                cancelContributionEntry,
+                cancelWinEntry,
                 synchronizedAccumulatorResult: accumulation,
             });
             const roundWins = sumRoundPoolWins(roundState);
@@ -208,7 +229,7 @@ export const transactionJackpot: IStreamTool<ITransactionJackpotConfig, IJackpot
                         currency: player.currency,
                         currencyRate: roundState.currencyRate,
                         ...roundWins,
-                        entry,
+                        entry: cancelWinEntry,
                         accumulation,
                         playerState,
                     },
@@ -225,25 +246,9 @@ export const transactionJackpot: IStreamTool<ITransactionJackpotConfig, IJackpot
 
     depositFinished,
 
+    playerFeed,
+
     campaignFeed,
 
     systemEvent,
 };
-
-async function getOrCreatePlayerState(loadPlayerState: (readOnly?: boolean) => Promise<IJackpotPlayerState>, config: ITransactionJackpotConfig) {
-    return (
-        (await loadPlayerState()) ?? {
-            _rounds: {},
-            _poolStatistics: Object.fromEntries(
-                Object.keys(config).map(poolName => [
-                    poolName,
-                    {
-                        totalContribution: 0,
-                        totalWin: 0,
-                        winsCount: 0,
-                    },
-                ]),
-            ),
-        }
-    );
-}
