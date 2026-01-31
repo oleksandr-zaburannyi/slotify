@@ -438,7 +438,7 @@ export class BadHombreWalletAdapter implements IWalletAdapter {
             const {totalBalance} = await this.fetch<ICashDrop, IBalanceResponse>("/api/game/bonus/cashdrop", params, player.brand!);
             return {balance: totalBalance};
         } else if (transaction.campaignType === "freeBets") {
-            if (transaction.campaignData!.used === transaction.campaignData?.total) {
+            if (transaction.type === "deposit" && transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) throw new Exception("Couldn't find campaign name");
                 const bonus = this.getBonus(campaign.name);

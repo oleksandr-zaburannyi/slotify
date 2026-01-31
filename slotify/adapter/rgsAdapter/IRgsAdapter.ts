@@ -1,4 +1,4 @@
-import {Router, Request} from "express";
+import {Express, Request} from "express";
 
 interface IAddFreeBetsRequest {
     walletCampaignId: string;
@@ -17,7 +17,7 @@ interface IAvailableBetsRequest {
 }
 
 export interface IRgsAdapter<TConfig = any> {
-    init: (provider: string, router: Router, config: TConfig) => void;
+    init: (provider: string, api: Express, basePath: string, config: TConfig) => void;
     launch: (mode: "real" | "fun" | "replay", config: TConfig, params: Record<string, string>, req?: Request) => Promise<string>;
 
     addFreeBets?: (request: IAddFreeBetsRequest, rgsConfig: TConfig, wallet: string, operator: string, brand: string) => Promise<string>;

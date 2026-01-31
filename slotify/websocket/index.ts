@@ -25,7 +25,7 @@ async function initApi(api: Express) {
 }
 
 async function init() {
-    const {api} = await createService("websocket", "1mb");
+    const {api} = await createService("websocket");
     await initRedis("websocket");
     await initApi(api);
     const server = await startService(api);

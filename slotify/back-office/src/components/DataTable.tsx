@@ -62,7 +62,7 @@ export const tableFilter = (type: "IN" | "EQUAL" | "LIKE" | "STARTS_WITH" | "DAT
                                 {label: "Today", value: [dayjs().startOf("day"), dayjs().endOf("day")]},
                                 {label: "Yesterday", value: [dayjs().startOf("day").subtract(1, "day"), dayjs().endOf("day").subtract(1, "day")]},
                                 {label: "This Month", value: [dayjs().startOf("month"), dayjs().endOf("month")]},
-                                {label: "Last Month", value: [dayjs().subtract(1, "month").startOf("month"), dayjs().subtract(1, "month").endOf("month")]},
+                                {label: "Last Month", value: [dayjs().subtract(1, "month").startOf("month"), dayjs().endOf("month").subtract(1, "month")]},
                             ]}
                         />
                     </Form.Item>
@@ -142,20 +142,20 @@ export const DataTable = forwardRef(({columns, queryName, filter, options, sort}
     const [customFilter, setCustomFilter] = useState<any[]>(variables.customFilter);
     const {data, isValidating, mutate, error} = useSWR([query, removeCustomFilter(variables)], fetcher, {revalidateOnFocus: false, shouldRetryOnError: false});
     const [{items, meta}, setResults] = useState<any>({items: [], meta: {}});
-    const columnKeys = columns.map((c: any) => c.dataIndex).join(",");
-    const [initialState, setInitialState] = useState({options, filter, sort, columnKeys});
+    const [initialState, setInitialState] = useState({options, filter, sort});
     useEffect(() => {
         if (!error && data) {
             setResults({items: data[queryName].items, meta: data[queryName].meta});
         }
     }, [data]);
 
-    // Update variables synchronously during render when props change (avoids double fetch)
-    const newInitialState = {options, filter, sort, columnKeys};
-    if (JSON.stringify(newInitialState) !== JSON.stringify(initialState)) {
-        setInitialState(newInitialState);
-        setVariables({...variables, options, filter: customFilter.concat((filter as any) || []), customFilter});
-    }
+    useEffect(() => {
+        const newInitialState = {options, filter, sort};
+        if (JSON.stringify(newInitialState) !== JSON.stringify(initialState)) {
+            setVariables({...variables, options, filter: filter || [], customFilter});
+            setInitialState(newInitialState);
+        }
+    }, [options, filter]);
 
     useImperativeHandle(ref, () => ({
         revalidate: async () => await mutate(),

@@ -30,15 +30,11 @@ jest.mock("@slotify/shared/lib/mail", () => ({sendMail: jest.fn, initMail: jest.
 const createPlayer = async (data: Partial<Player> = {}) => {
     const player = Player.create({nativeId: Math.round(Math.random() * 1000000).toString(), currency: "eur", wallet: "demo", operator: "casino", ...data}) as Player;
     await player.save();
-    const obj: any = {...player, createdAt: player.createdAt.getTime(), playerId: player.id, brand: null, excludedFromInspection: false, excludedFromReports: false};
+    const obj: any = {...player, createdAt: player.createdAt.getTime(), playerId: player.id, brand: null};
     delete obj.id;
     delete obj.updatedAt;
     delete obj.token;
     delete obj.blocked;
-    delete obj.group;
-    delete obj.transactions;
-    delete obj.excludedFromInspection;
-    delete obj.excludedFromReports;
     return obj;
 };
 

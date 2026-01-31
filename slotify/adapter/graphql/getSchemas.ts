@@ -15,7 +15,6 @@ const fetchGraphQL = async (uri: string, data: any) => {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify(data),
-        timeout: 2 * 60 * 1000,
     });
     return await fetchResult.json();
 };

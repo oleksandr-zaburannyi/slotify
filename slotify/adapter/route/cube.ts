@@ -19,12 +19,6 @@ export default async function cube(regenerateDate?: Date, delay: number = 1000, 
     startAggregation(regenerateDate, delay).then(onComplete);
 }
 
-function isSameDbInstance(connectionA: string, connectionB: string): boolean {
-    const a = getConnection(connectionA).options as {host?: string; port?: number; database?: string};
-    const b = getConnection(connectionB).options as {host?: string; port?: number; database?: string};
-    return a.host === b.host && a.port === b.port && a.database === b.database;
-}
-
 async function startAggregation(regenerateDate?: Date, delay: number = 1000) {
     logger.info("aggregateReports started");
 
@@ -47,7 +41,7 @@ async function startAggregation(regenerateDate?: Date, delay: number = 1000) {
     while (from.diff(end, interval).as(interval) <= 0) {
         const to = from.plus({[interval]: 1});
         const isCurrentHour = from.diff(end, interval).as(interval) === 0;
-        if (!isSameDbInstance("primary", "replica") && replicationTime.diff(to).as("milliseconds") < 0 && !isCurrentHour) {
+        if (replicationTime.diff(to).as("milliseconds") < 0 && !isCurrentHour) {
             logger.error(`Couldn't run aggregation as replication lag is ${replicationTime.diff(to).as("milliseconds")}ms`, {replicationTime, from, to});
             break;
         }

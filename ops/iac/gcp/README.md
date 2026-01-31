@@ -4,66 +4,33 @@
 
 **Applies only for the first environment**
 
-The **top-project** hosts shared resources (DNS zones, Terraform state bucket) used by all environments.
-
 1. Install [gcloud](https://cloud.google.com/sdk/docs/install) and [gsutil](https://cloud.google.com/storage/docs/gsutil_install)
-2. ⚠️ **Grant Organization Policy Viewer role to deploying users**
-   - Users deploying infrastructure need the **Organization Policy Viewer** role (`roles/orgpolicy.policyViewer`) on the organization:
-     1. Go to [IAM & Admin → IAM](https://console.cloud.google.com/iam-admin/iam)
-     2. Select your **organization** in the project selector
-     3. Click **Grant Access**
-     4. Enter the user's email and select **Organization Policy Viewer** role
-3. ⚠️ **Disable domain-restricted sharing policy** _(if enforced)_
-   - The `iam.allowedPolicyMemberDomains` policy must be **disabled at the organization level** to allow public CDN bucket access:
-     1. Go to [Organization Policies](https://console.cloud.google.com/iam-admin/orgpolicies)
-     2. Select your **organization** in the project selector
-     3. Search for `iam.allowedPolicyMemberDomains`
-     4. Set enforcement to **Off**
-4. Authenticate your Google Cloud account:
-   - `gcloud auth login`
-   - `gcloud auth application-default login` _(required for Terraform to authenticate API calls)_
-5. Create a top-project to manage shared configuration across all environments (e.g., `my-company-tech`)
-6. Create a bucket for Terraform backend state (e.g., `my-company-terraform`)
-7. Enable Cloud DNS API and create a new DNS zone for your domain:
-   - Go to Cloud DNS → Create Zone
-   - Zone name: e.g., `my-company-tech`
-   - DNS name: your domain, e.g., `my-company.tech`
-   - DNSSEC and logging can be off
-8. Get the Google nameservers for your zone:
-   ```bash
-   gcloud dns managed-zones describe ${DNS_ZONE} --project=${PROJECT}
-   ```
-   Look for the `nameServers` section in the output.
-9. ⚠️ **Configure your domain to use Google nameservers** _(required before Terraform can provision SSL certificates)_
-   - **Option A: New domain** — Buy a domain and point it to Google nameservers in your registrar's admin panel.
-   - **Option B: Existing domain (full delegation)** — Update the nameservers at your current registrar to point to Google's nameservers.
-   - **Option C: Existing domain (subdomain only)** — If you don't want to move the entire domain to GCP, create NS records for a subdomain (e.g., `platform.my-company.com`) pointing to Google nameservers. Then create the DNS zone in GCP for that subdomain.
-   - Verify DNS propagation: `dig +trace my-company.tech`
-   - If using Google Domains, you can [import it to Google Cloud](https://cloud.google.com/domains/docs/reference/rest/v1/projects.locations.registrations/import)
-10. ⚠️ **Set up an email account for back-office emails** _(required to create new admin accounts after initial setup)_
-   - For Gmail: enable 2FA and generate an [App Password](https://support.google.com/accounts/answer/185833)
-   - Use `smtp.gmail.com` with port `465`
+2. [Authenticate Google Cloud Account](https://cloud.google.com/sdk/gcloud/reference/auth/login)
+3. Create top-project to manage domain configuration across all envs (i.e. `my-company-tech`)
+4. Create bucket for terraform backend state (i.e. `my-company-tech`)
+5. Enable Cloud DNS API and create new DNS zone for your domain (Cloud DNS->Create Zone, zone name is i.e. `my-company-tech` and DNS is your domain i.e. `my-company.tech`. DNSSEC and logging can be off).
+6. Run `gcloud dns managed-zones describe ${DNS_ZONE} --project=${PROJECT}` to see a list of associated name servers (`nameServers` section)
+7. Buy a domain (i.e. `my-company.tech`) and configure its DNS to point to Google name servers (list from previous point) in your domain's provider admin panel. Run `dig +trace my-company.tech` to confirm name server configuration. If you
+   use Google Domain, import it to Google Cloud (https://cloud.google.com/domains/docs/reference/rest/v1/projects.locations.registrations/import)
+8. Create an email account for sending emails from back office (for Gmail please generate [App Password](https://support.google.com/accounts/answer/185833?visit_id=638149000769784355-2423611641&p=InvalidSecondFactor&rd=1))
 
 ## Environment set up
 
 1. Create a new Google Cloud project for the environment
 2. Create folder `my-env`, copy `main.tf` file and edit variables
-3. Run script (two-step apply required for new environments)
+3. Run script
 
 ```shell
+
 cd my-env
 terraform init
 
-# First apply: creates the GKE cluster and configures the Kubernetes provider
-terraform apply -target=module.<module-name>.google_container_cluster.cluster -auto-approve
+#cluster needs to be created first
+terraform apply -target=module.my-env.google_container_cluster.cluster -auto-approve #remember to change my-env!
 
-# Second apply: creates Kubernetes resources which require cluster connectivity to plan
+#create the rest
 terraform apply -auto-approve
 ```
-
-Replace `<module-name>` with the name used in your `main.tf` module block (e.g., if you have `module "dev" { ... }`, use `dev`).
-
-> **Note**: The two-step apply is needed because Kubernetes resources require an active cluster connection during the planning phase. The first apply creates the cluster and configures the Kubernetes provider, while the second apply creates Kubernetes resources (namespaces, deployments, services, etc.) which cannot be planned without cluster connectivity. After the initial setup, regular `terraform apply` works normally.
 
 ### Configuration
 
@@ -195,101 +162,10 @@ Repeat the pull/tag/push cycle for every image and tag you plan to deploy. Helpf
 
 ## Troubleshooting
 
-### Authentication & Permissions
-
-#### Terraform state access denied
+If you ever encounter the following error, make sure the person has read and write permissions on the cdn bucket (default: `cdn-<project>`) and also the terraform state bucket (default: `tequity-terraform`):
 
 ```
-Failed to get existing workspaces: querying Cloud Storage failed: googleapi: Error 403:
-<email@example.com> does not have storage.objects.list access to the Google Cloud Storage bucket.
-Permission 'storage.objects.list' denied on resource (or it may not exist)., forbidden
+Failed to get existing workspaces: querying Cloud Storage failed: googleapi: Error 403: <email@example.com> does not have storage.objects.list access to the Google Cloud Storage bucket. Permission 'storage.objects.list' denied on resource (or it may not exist)., forbidden
 ```
 
-**Cause**: User lacks permissions on the Terraform state bucket.
-**Solution**: Grant `Storage Object Viewer` and `Storage Object Creator` roles on the terraform state bucket (e.g., `my-company-terraform`) and the CDN bucket (e.g., `cdn-<project>`).
-
-#### Service account logs not visible
-
-**Cause**: Service account lacks logging permissions.
-**Solution**: Go to IAM & Admin → Service Account, copy the service account email. Then go to IAM & Admin → IAM and grant the "Editor" role to that service account.
-
-### GCP Organization Policies
-
-#### IAM binding fails with conditionNotMet
-
-```
-Error: Error applying IAM policy to storage bucket: googleapi: Error 412:
-One or more users named in the policy do not belong to a permitted customer., conditionNotMet
-```
-
-**Cause**: `iam.allowedPolicyMemberDomains` policy blocks `allUsers` from being granted access.
-**Solution**: Disable the policy at the organization level:
-1. Go to [IAM & Admin → Organization Policies](https://console.cloud.google.com/iam-admin/orgpolicies)
-2. Select your **organization** in the project selector dropdown
-3. Search for `iam.allowedPolicyMemberDomains`
-4. Click **Manage Policy** → Set "Policy enforcement" to **Off**
-5. Click **Set Policy**
-
-#### Organization policy permission denied
-
-```
-Error: Error creating Project Override: googleapi: Error 403:
-PERMISSION_DENIED: Permission 'orgpolicy.policy.get' denied on resource
-```
-
-**Cause**: User lacks the Organization Policy Viewer role.
-**Solution**: Grant the user the Organization Policy Viewer role (`roles/orgpolicy.policyViewer`) at the organization level:
-1. Go to [IAM & Admin → IAM](https://console.cloud.google.com/iam-admin/iam)
-2. Select your **organization** in the project selector
-3. Click **Grant Access**
-4. Enter the user's email and select **Organization Policy Viewer** role
-
-### Timing & Propagation
-
-#### Kubernetes resources fail to plan on new environment
-
-```
-Error: cannot create REST client: no client config
-```
-
-**Cause**: Kubernetes resources require an active cluster connection during the planning phase.
-**Solution**: Use the two-step apply process described in "Environment set up" - first create the cluster with `-target`, then run a full apply.
-
-#### GMP operator webhook not available
-
-```
-Error: failed calling webhook "default.podmonitorings.gmp-operator.gmp-system.monitoring.googleapis.com":
-no endpoints available for service "gmp-operator"
-```
-
-**Cause**: The GKE cluster was just created and Google Managed Prometheus operator hasn't fully initialized yet.
-**Solution**: Wait a few minutes and run `terraform apply` again.
-
-#### API recently enabled - write access denied
-
-```
-Error: Error creating Instance: googleapi: Error 403: Write access to project was denied:
-If you enabled this API recently, wait a few minutes for the action to propagate
-```
-
-**Cause**: APIs were just enabled and permissions haven't propagated through Google's systems yet.
-**Solution**: Wait a few minutes and run `terraform apply` again.
-
-### DNS & SSL
-
-#### ERR_SSL_VERSION_OR_CIPHER_MISMATCH or empty response
-
-**Cause**: SSL certificate is still being provisioned (requires DNS propagation).
-**Solution**: Wait 5-30 minutes. Verify DNS with `dig +trace your-domain.com`.
-
-#### DNS not resolving to correct IP
-
-**Cause**: DNS nameservers not configured at domain registrar.
-**Solution**: Run `gcloud dns managed-zones describe ZONE --project=TOP_PROJECT` to get nameservers, then configure them at your domain registrar.
-
-### SMTP & Email
-
-#### Cannot create new back-office users
-
-**Cause**: SMTP not configured or credentials incorrect.
-**Solution**: Verify SMTP settings in your environment's `main.tf`. For Gmail, ensure you're using an App Password (not regular password) with 2FA enabled.
+If you encounter logs from services not being visible you need to go to IAM & Admin -> Service Account, copy email of the service account and go to IAM & Admin -> IAM and Grant Access to that Service Account with a role "Editor".

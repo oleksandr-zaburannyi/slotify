@@ -1,7 +1,7 @@
 /**
  * Reevo wallet adapter
  */
-import {Router, Request, Response} from "express";
+import {Express, Request, Response} from "express";
 import {check, query} from "express-validator";
 import * as crypto from "crypto";
 import {gql} from "graphql-request";
@@ -71,14 +71,14 @@ export class ReevoWalletAdapter implements IWalletAdapter {
         return this.config.operator || "reevo";
     }
 
-    async init(wallet: string, router: Router, config: IConfig) {
+    async init(wallet: string, api: Express, path: string, config: IConfig) {
         this.wallet = wallet;
         this.config = config;
         this.cipher = new Cipher(this.config.callerPass, this.wallet);
 
         // wallet/reevo/launch
-        router.post(
-            "/launch",
+        api.post(
+            path + "/launch",
             // this.validateServer.bind(this),
             validate([
                 check("play_for_fun").isIn(["0", "1"]),
@@ -158,8 +158,8 @@ export class ReevoWalletAdapter implements IWalletAdapter {
         );
 
         // wallet/reevo/launch/replay
-        router.post(
-            "/launch/replay",
+        api.post(
+            path + "/launch/replay",
             // this.validateServer.bind(this),
             validate([check("operatorId").isString().exists().isLength({max: 255}), check("gameId").isString().exists().isLength({max: 255}), check("roundId").isString().exists().isLength({max: 255})]),
             async (req, res) => {
@@ -195,8 +195,8 @@ export class ReevoWalletAdapter implements IWalletAdapter {
         );
 
         // wallet/reevo/addFreeRounds
-        router.post(
-            "/addFreeRounds",
+        api.post(
+            path + "/addFreeRounds",
             // this.validateServer.bind(this),
             validate([
                 check("api_login").equals(this.config.callerID),
@@ -307,8 +307,8 @@ export class ReevoWalletAdapter implements IWalletAdapter {
         );
 
         // wallet/reevo/removeFreeRounds
-        router.post(
-            "/removeFreeRounds",
+        api.post(
+            path + "/removeFreeRounds",
             // this.validateServer.bind(this),
             validate([
                 check("api_login").equals(this.config.callerID),

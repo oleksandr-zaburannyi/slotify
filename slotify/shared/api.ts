@@ -120,7 +120,7 @@ export async function createService(
 
                 if (res.statusCode >= 400) {
                     logger.warn(message, meta);
-                } else if (ignore.includes(req.originalUrl) || req.method === "OPTIONS") {
+                } else if (ignore.includes(req.originalUrl)) {
                     logger.verbose(message, meta);
                 } else if (isInternal(req)) {
                     logger.http(message, meta);

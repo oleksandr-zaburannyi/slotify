@@ -215,12 +215,6 @@ variable "database-edition" {
   description = "Cloud SQL edition (e.g. ENTERPRISE)."
 }
 
-variable "database-replica-edition" {
-  type = string
-  default = "ENTERPRISE"
-  description = "Cloud SQL edition (e.g. ENTERPRISE)."
-}
-
 variable "database-replica-tier" {
   type = string
   description = "Machine tier for the read replica instance."

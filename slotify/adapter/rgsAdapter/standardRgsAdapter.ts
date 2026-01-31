@@ -35,13 +35,13 @@ const getLaunchUrl = (mode: string, config: IConfig): string | undefined => {
 };
 
 const adapter: IRgsAdapter<IConfig> = {
-    init: function init(rgs, router, config) {
+    init: function init(rgs, api, basePath, config) {
         if (!config.secretKey) {
-            throw new Error(`Secret key not specified for RGS ${rgs}`);
+            throw new Error(`Secret key not specified for ${basePath}`);
         }
 
-        router.post(
-            "/authenticate",
+        api.post(
+            basePath + "/authenticate",
             hmac(config.secretKey),
             validate([
                 body("wallet").isString().exists().isLength({max: 255}),
@@ -63,8 +63,8 @@ const adapter: IRgsAdapter<IConfig> = {
             },
         );
 
-        router.put(
-            "/transaction",
+        api.put(
+            basePath + "/transaction",
             hmac(config.secretKey),
             validate([
                 body("playerId").isString().exists().isUUID(4),
@@ -142,8 +142,8 @@ const adapter: IRgsAdapter<IConfig> = {
             },
         );
 
-        router.get(
-            "/balance",
+        api.get(
+            basePath + "/balance",
             hmac(config.secretKey),
             validate([query("playerId").isUUID(4).exists(), query("provider").isString().exists().isLength({max: 255}), query("game").isString().isLength({max: 255}).exists()]),
             async (req, res) => {
@@ -152,8 +152,8 @@ const adapter: IRgsAdapter<IConfig> = {
             },
         );
 
-        router.delete(
-            "/cancel",
+        api.delete(
+            basePath + "/cancel",
             hmac(config.secretKey),
             validate([body("roundId").isString().optional({nullable: true}).isLength({max: 255}), body("rgsTransactionId").isString().optional({nullable: true}).isLength({max: 255}), body("auto").optional({nullable: true}).isBoolean()]),
             async (req, res) => {
@@ -173,8 +173,8 @@ const adapter: IRgsAdapter<IConfig> = {
             },
         );
 
-        router.post(
-            "/message",
+        api.post(
+            basePath + "/message",
             hmac(config.secretKey),
             validate([body("playerId").isUUID(4).exists(), body("provider").isString().exists().isLength({max: 255}), body("game").isString().isLength({max: 255}).exists(), body("data").isObject().exists()]),
             async (req, res) => {

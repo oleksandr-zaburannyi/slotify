@@ -74,7 +74,7 @@ export const server: IMultiplayerGame = {
   connected: ({time, state}) => {
     return {message: {drawEndTime: state.drawEndTime}};
   },
-  command: ({time, playerId, action, bet, currency, params, config, state, betLimits}) => {
+  command: ({time, playerId, action, bet, currency, params, state, betLimits}) => {
     if (
       action !== "main" || !Number.isInteger(params.luckyNumber) ||
       state.acceptedBets.some(acceptedBet => acceptedBet.playerId === playerId)
@@ -83,7 +83,7 @@ export const server: IMultiplayerGame = {
     }
     return {valid: true, instantTick: true};
   },
-  tick: async ({time, config, state, commands}, random) => {
+  tick: async ({time, state, commands}, random) => {
     const wins = {};
     const cancels = [];
     const messages = {};
@@ -195,9 +195,8 @@ export const server: IGame = {
 Init async function is triggered only once on the very beggining after the rooom was created.
 It is provided with object with the following params:
 
-- `time` - current timestamp
-- `roomId` - unique identifier of the room
-- `config` - room configuration (passed from RGS, can contain room-specific settings)
+- `time` - curernt timestamp
+- `config` - room config
 
 Second argument is the random numbers generator:
 
@@ -252,7 +251,6 @@ It is provided with object with the following params:
 - `bet` - bet amount (only for betting commands)
 - `currency` - bet currency (only for betting commands)
 - `params` - object to pass data from the game client
-- `config` - room configuration (passed from RGS, can contain room-specific settings)
 - `state` - game state
 - `betLimits` - bet limits object includes:
   - minBet: min bet in player's currency
@@ -306,9 +304,7 @@ Important: `state` can be changed in parallel so there is no guarantee that the 
 It is provided with object with the following params:
 
 - `time` - current timestamp
-- `config` - room configuration (passed from RGS, can contain room-specific settings)
 - `state` - game state
-- `drawId` - unique identifier for this draw/round
 - `commands` - commands array contains
     - `commandId` - command Id
     - `playerId` - player Id
@@ -522,7 +518,7 @@ proveFairness(addRandomization: IRandomizationBuilder, data: {maxMultiplier: num
 
     return {crashPointX, crashPointMultiplier};
   });
-}
+},
 ```
 
 ## Random Numbers Generator

@@ -1,17 +1,13 @@
 import {Button, DatePicker, Divider, Form, Input, Select, Space, Table, Tooltip} from "antd";
 import React, {useEffect, useState} from "react";
 import {ConfigProps, ICampaignType} from "./campaignTypes";
-import {CloseCircleOutlined, DeleteOutlined, InfoCircleOutlined, PlusCircleOutlined} from "@ant-design/icons";
+import {DeleteOutlined, InfoCircleOutlined, PlusCircleOutlined} from "@ant-design/icons";
 import env from "../../lib/env";
 import dayjs from "dayjs";
 import Currency from "../../components/Currency";
-import {PrizeItemTranslations} from "../../components/PrizeItemTranslations";
-import {CurrencyOverridesModal} from "../../components/CurrencyOverridesModal";
-import useGraphQlFetcher from "../../lib/useGraphQlFetcher";
-import {gql} from "graphql-request";
 
-type IPrizeConfig = {type: "cash" | "item" | "multiplier"; value: number | string; amount: number; limit?: number; weight?: number; translations?: Record<string, string>; currencyOverrides?: Record<string, number>};
-type ICampaignConfig = {qualifyingBet: number; qualifyingBetOverrides?: Record<string, number>; probability: number; boostedProbabilityStart?: number; prizes: IPrizeConfig[]};
+type IPrizeConfig = {type: "cash" | "item" | "multiplier"; value: number | string; amount: number; limit?: number};
+type ICampaignConfig = {qualifyingBet: number; probability: number; boostedProbabilityStart?: number; prizes: IPrizeConfig[]};
 type ICampaignState = {amountsLeft: number[]; _fixedCurrencyRates: Record<string, number>};
 
 type IPrizeDropDetails = {config: ICampaignConfig; state: ICampaignState};
@@ -34,23 +30,17 @@ export const PrizeDropDetails = ({config, state}: IPrizeDropDetails) => {
     const prizesColumns = [
         {
             title: "Prize",
-            render: ({value, type, limit, translations}: any) => (
+            render: ({value, type, limit}: any) => (
                 <>
                     {type === "cash" && <Currency currency={env.VITE_BASE_CURRENCY} amount={value} />}
-                    {type === "item" && (
-                        <>
-                            {value}
-                            {translations && Object.keys(translations).length > 0 && <span style={{color: "#888", marginLeft: 8}}>({Object.keys(translations).length} translations)</span>}
-                        </>
-                    )}
+                    {type === "item" && value}
                     {type === "multiplier" && `x${value} bet` + (Number.isFinite(limit) ? `(limit ${limit})` : "")}
                 </>
             ),
         },
-        {title: "Weight", dataIndex: "weight"},
         {title: "Amount Left", dataIndex: "amountLeft"},
     ];
-    const prizesData = config.prizes.map((prize, index) => ({type: prize.type, value: prize.value, translations: prize.translations, key: index, weight: prize.weight ?? 1, amountLeft: state.amountsLeft[index] + "/" + prize.amount}));
+    const prizesData = config.prizes.map((prize, index) => ({type: prize.type, value: prize.value, key: index, amountLeft: state.amountsLeft[index] + "/" + prize.amount}));
 
     return (
         <>
@@ -64,27 +54,9 @@ export const PrizeDropDetails = ({config, state}: IPrizeDropDetails) => {
 
 export const PrizeDropConfig: React.FC<ConfigProps> = ({value, onChange, edit}) => {
     const [data, setData] = useState<ICampaignConfig>(edit ? value : {qualifyingBet: 1.0, probability: 0.001, prizes: []});
-    const [availableLanguages, setAvailableLanguages] = useState<string[]>([]);
-    const fetcher = useGraphQlFetcher();
-
     useEffect(() => {
         onChange!(data);
     }, [data]);
-
-    useEffect(() => {
-        fetcher([
-            gql`
-                query {
-                    defaultThemes
-                }
-            `,
-            {},
-        ]).then(response => {
-            if (response.defaultThemes?.prizeDrop?.translations) {
-                setAvailableLanguages(Object.keys(response.defaultThemes.prizeDrop.translations));
-            }
-        });
-    }, []);
 
     const patchPrizes = (index: number, newPrize: any) => {
         setData({
@@ -107,39 +79,29 @@ export const PrizeDropConfig: React.FC<ConfigProps> = ({value, onChange, edit}) 
 
     const renderPrize = (index: number, prize: any) => {
         switch (prize.type) {
-            case "cash": {
-                const hasOverrides = Object.keys(prize.currencyOverrides || {}).length > 0;
+            case "cash":
                 return (
-                    <>
-                        <Form.Item
-                            initialValue={(prize.value as number).toFixed(2)}
-                            name={index + "_value"}
-                            rules={[{required: true, message: "Please enter value"}]}
-                            label={
-                                <>
-                                    Cash ({env.VITE_BASE_CURRENCY}) &nbsp;{" "}
-                                    <Tooltip placement={"left"} overlayStyle={{maxWidth: "500px"}} title={`This value will get converted to player's currency. Use the currency button to define custom values per currency.`}>
-                                        <InfoCircleOutlined />
-                                    </Tooltip>
-                                </>
-                            }
-                        >
-                            <Input
-                                type="number"
-                                step={0.01}
-                                min={0}
-                                disabled={edit || hasOverrides}
-                                onChange={e => patchPrizes(index, {value: parseCashValue(e.target.value)})}
-                                style={{width: 120}}
-                                suffix={hasOverrides && !edit ? <CloseCircleOutlined style={{color: "#ff4d4f", cursor: "pointer"}} onClick={() => patchPrizes(index, {currencyOverrides: {}})} /> : undefined}
-                            />
-                        </Form.Item>
-                        <CurrencyOverridesModal baseValue={prize.value as number} currencyOverrides={prize.currencyOverrides || {}} onChange={currencyOverrides => patchPrizes(index, {currencyOverrides})} disabled={edit} />
-                    </>
+                    <Form.Item
+                        initialValue={(prize.value as number).toFixed(2)}
+                        name={index + "_value"}
+                        rules={[{required: true, message: "Please enter value"}]}
+                        label={
+                            <>
+                                Cash ({env.VITE_BASE_CURRENCY}) &nbsp;{" "}
+                                <Tooltip
+                                    placement={"left"}
+                                    overlayStyle={{maxWidth: "500px"}}
+                                    title={`This value will get converted to player's currency - system will try to round the value to a nice looking cash prize. This might affect the cost of Campaign up to 10% of the base currency (${env.VITE_BASE_CURRENCY}) cost.`}
+                                >
+                                    <InfoCircleOutlined />
+                                </Tooltip>
+                            </>
+                        }
+                    >
+                        <Input type="number" step={0.01} min={0} disabled={edit} onChange={e => patchPrizes(index, {value: parseCashValue(e.target.value)})} style={{width: 120, marginRight: 20}} />
+                    </Form.Item>
                 );
-            }
-            case "multiplier": {
-                const hasOverrides = Object.keys(prize.currencyOverrides || {}).length > 0;
+            case "multiplier":
                 return (
                     <>
                         <Form.Item
@@ -165,43 +127,24 @@ export const PrizeDropConfig: React.FC<ConfigProps> = ({value, onChange, edit}) 
                             label={
                                 <>
                                     Cash limit ({env.VITE_BASE_CURRENCY}) &nbsp;{" "}
-                                    <Tooltip placement={"left"} overlayStyle={{maxWidth: "500px"}} title={`Bet Multiplier cash prize will be capped at this value. Use the currency button to define custom values per currency.`}>
+                                    <Tooltip placement={"left"} overlayStyle={{maxWidth: "500px"}} title={`Bet Multiplier cash prize will be capped at this value.`}>
                                         <InfoCircleOutlined />
                                     </Tooltip>
                                 </>
                             }
                         >
-                            <Input
-                                type="number"
-                                step={0.01}
-                                min={0}
-                                disabled={edit || hasOverrides}
-                                onChange={e => patchPrizes(index, {limit: parseCashValue(e.target.value)})}
-                                style={{width: 120, marginRight: 20}}
-                                suffix={hasOverrides && !edit ? <CloseCircleOutlined style={{color: "#ff4d4f", cursor: "pointer"}} onClick={() => patchPrizes(index, {currencyOverrides: {}})} /> : undefined}
-                            />
+                            <Input type="number" step={0.01} min={0} disabled={edit} onChange={e => patchPrizes(index, {limit: parseCashValue(e.target.value)})} style={{width: 120, marginRight: 20}} />
                         </Form.Item>
-                        <CurrencyOverridesModal baseValue={prize.limit || 0} currencyOverrides={prize.currencyOverrides || {}} onChange={currencyOverrides => patchPrizes(index, {currencyOverrides})} disabled={edit} />
                     </>
                 );
-            }
             case "item":
                 return (
-                    <>
-                        <Form.Item initialValue={prize.value} name={index + "_value"} label={`Item name`} rules={[{required: true, message: "Please enter value"}]} style={{marginBottom: 0}}>
-                            <Input type="text" disabled={edit} onChange={e => patchPrizes(index, {value: e.target.value})} style={{width: 150}} />
-                        </Form.Item>
-                        {availableLanguages.length > 0 && (
-                            <Form.Item>
-                                <PrizeItemTranslations translations={prize.translations || {}} onChange={translations => patchPrizes(index, {translations})} availableLanguages={availableLanguages} disabled={edit} />
-                            </Form.Item>
-                        )}
-                    </>
+                    <Form.Item initialValue={prize.value} name={index + "_value"} label={`Item name`} rules={[{required: true, message: "Please enter value"}]}>
+                        <Input type="text" disabled={edit} onChange={e => patchPrizes(index, {value: e.target.value})} style={{width: 120, marginRight: 20}} />
+                    </Form.Item>
                 );
         }
     };
-
-    const hasQualifyingBetOverrides = Object.keys(data.qualifyingBetOverrides || {}).length > 0;
 
     return (
         <>
@@ -213,23 +156,14 @@ export const PrizeDropConfig: React.FC<ConfigProps> = ({value, onChange, edit}) 
                     label={
                         <>
                             Min bet ({env.VITE_BASE_CURRENCY}) &nbsp;{" "}
-                            <Tooltip placement={"left"} overlayStyle={{maxWidth: "500px"}} title={`This threshold will be converted to player's currency. Use the currency button to define custom values per currency.`}>
+                            <Tooltip placement={"left"} overlayStyle={{maxWidth: "500px"}} title={`This threshold will be converted to player's currency`}>
                                 <InfoCircleOutlined />
                             </Tooltip>
                         </>
                     }
                 >
-                    <Input
-                        type="number"
-                        step={0.01}
-                        min={0}
-                        disabled={edit || hasQualifyingBetOverrides}
-                        onChange={e => setData({...data, qualifyingBet: parseFloat(e.target.value)})}
-                        style={{width: 130}}
-                        suffix={hasQualifyingBetOverrides && !edit ? <CloseCircleOutlined style={{color: "#ff4d4f", cursor: "pointer"}} onClick={() => setData({...data, qualifyingBetOverrides: {}})} /> : undefined}
-                    />
+                    <Input type="number" step={0.01} min={0} disabled={edit} onChange={e => setData({...data, qualifyingBet: parseFloat(e.target.value)})} style={{width: 120, marginRight: 20}} />
                 </Form.Item>
-                <CurrencyOverridesModal baseValue={data.qualifyingBet} currencyOverrides={data.qualifyingBetOverrides || {}} onChange={qualifyingBetOverrides => setData({...data, qualifyingBetOverrides})} disabled={edit} />
 
                 <Form.Item initialValue={data.probability} label="Drop probability" name="probability" rules={[{required: true}]}>
                     <Input type="number" step={0.001} min={0} onChange={e => setData({...data, probability: parseFloat(e.target.value)})} style={{width: 120, marginRight: 20}} />
@@ -267,7 +201,6 @@ export const PrizeDropConfig: React.FC<ConfigProps> = ({value, onChange, edit}) 
                                 changePrizeType(index, {
                                     type,
                                     value: {cash: 1.0, item: "my item prize", multiplier: 1}[type as string],
-                                    translations: type === "item" ? {} : undefined,
                                 })
                             }
                         >
@@ -286,26 +219,6 @@ export const PrizeDropConfig: React.FC<ConfigProps> = ({value, onChange, edit}) 
 
                     <Form.Item initialValue={prize.amount} name={index + "_amount"} label={`Quantity`} rules={[{required: true}]}>
                         <Input type="number" step={1} min={1} disabled={edit} onChange={e => patchPrizes(index, {amount: parseInt(e.target.value)})} style={{width: 120, marginRight: 20}} />
-                    </Form.Item>
-
-                    <Form.Item
-                        initialValue={prize.weight ?? 1}
-                        name={index + "_weight"}
-                        label={
-                            <>
-                                Weight &nbsp;{" "}
-                                <Tooltip
-                                    placement={"left"}
-                                    overlayStyle={{maxWidth: "500px"}}
-                                    title={`Probability weight for this prize. Higher weight means higher chance of being selected. Example: a prize with weight 2 has twice the probability of a prize with weight 1.`}
-                                >
-                                    <InfoCircleOutlined />
-                                </Tooltip>
-                            </>
-                        }
-                        rules={[{required: true}]}
-                    >
-                        <Input type="number" step={1} min={1} disabled={edit} onChange={e => { const weight = parseInt(e.target.value); if (!isNaN(weight) && weight >= 1) patchPrizes(index, {weight}); }} style={{width: 80, marginRight: 20}} />
                     </Form.Item>
 
                     {renderPrize(index, prize)}
@@ -333,7 +246,7 @@ export const PrizeDropConfig: React.FC<ConfigProps> = ({value, onChange, edit}) 
                 style={{width: "50%", marginLeft: "25%"}}
                 icon={<PlusCircleOutlined />}
                 onClick={() => {
-                    setData({...data, prizes: data.prizes.concat({type: "cash", value: 1.0, amount: 10, weight: 1})});
+                    setData({...data, prizes: data.prizes.concat({type: "cash", value: 1.0, amount: 10})});
                 }}
             >
                 Add prize
@@ -346,7 +259,4 @@ export const PrizeDrop: ICampaignType = {
     name: "Prize Drop",
     configForm: PrizeDropConfig,
     details: PrizeDropDetails,
-    playerColumns: [
-        {title: "Qualified Bets", render: ({playerState}: any) => (playerState?.qualifiedBets ?? 0).toString()},
-    ],
 };

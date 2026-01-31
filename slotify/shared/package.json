@@ -1,6 +1,6 @@
 {
     "name": "@slotify/shared",
-    "version": "2.2.0",
+    "version": "2.1.11",
     "author": "",
     "license": "UNLICENSED",
     "main": "dist/index.js",

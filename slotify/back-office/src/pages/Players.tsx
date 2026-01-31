@@ -1,5 +1,4 @@
 import React, {useRef} from "react";
-import {Link} from "react-router-dom";
 import {DataTable, tableFilter} from "../components/DataTable";
 import {Button, Form, Input, Select, Tag} from "antd";
 import {PlayCircleOutlined} from "@ant-design/icons";
@@ -38,7 +37,7 @@ const Players = () => {
 
     const columns: any[] = [
         {title: "Created at", dataIndex: "createdAt", render: (createdAt: string) => new Date(createdAt).toLocaleString(), sorter: true, ...tableFilter("TIME")},
-        {title: "Player Id", dataIndex: "playerId", render: (playerId: string) => <Link to={`/players/${playerId}`}>{playerId}</Link>, sorter: true, ...tableFilter("EQUAL")},
+        {title: "Player Id", dataIndex: "playerId", sorter: true, ...tableFilter("EQUAL")},
         {title: "Native Id", dataIndex: "nativeId", sorter: true, ...tableFilter("STARTS_WITH")},
         {title: "Nickname", dataIndex: "nickname", sorter: true, ...tableFilter("LIKE")},
         {title: "Currency", dataIndex: "currency", sorter: true, ...tableFilter("LIKE")},

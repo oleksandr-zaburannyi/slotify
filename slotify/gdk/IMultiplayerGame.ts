@@ -24,8 +24,7 @@ export interface ICommandData<TParams> {
     data?: {nickname?: string; betLimits?: IBetLimits};
 }
 
-export interface ICommandRequest<TState, TParams, TConfig> extends ICommandData<TParams> {
-    config: TConfig;
+export interface ICommandRequest<TState, TParams> extends ICommandData<TParams> {
     state: TState;
     betLimits?: IBetLimits;
 }
@@ -57,9 +56,8 @@ export interface ICommandResponse {
     message?: any;
 }
 
-export interface ITickRequest<TState, TParams, TConfig, TSystemParams> {
+export interface ITickRequest<TState, TParams, TSystemParams> {
     time: number;
-    config: TConfig;
     state: TState;
     commands: ICommand<TParams>[];
     drawId: string;
@@ -78,7 +76,7 @@ export interface ITickResponse<TState> {
     };
 }
 
-export type ITick<TState = any, TParams = any, TConfig = any, TSystemParams = any> = ITickRequest<TState, TParams, TConfig, TSystemParams> & ITickResponse<TState>;
+export type ITick<TState = any, TParams = any, TSystemParams = any> = ITickRequest<TState, TParams, TSystemParams> & ITickResponse<TState>;
 
 export interface IConnectedRequest<TState> {
     time: number;
@@ -112,9 +110,9 @@ export interface IMultiplayerGame<TState = any, TParams = any, TConfig = any, TS
 
     systemCommand?(request: ISystemCommandRequest<TState, TSystemParams>): Omit<ICommandResponse, "roundId">;
 
-    command(request: ICommandRequest<TState, TParams, TConfig>): ICommandResponse;
+    command(request: ICommandRequest<TState, TParams>): ICommandResponse;
 
-    tick(request: ITickRequest<TState, TParams, TConfig, TSystemParams>, random: IRandom): Promise<ITickResponse<TState>>;
+    tick(request: ITickRequest<TState, TParams, TSystemParams>, random: IRandom): Promise<ITickResponse<TState>>;
 
     replay(state: TState, playerId?: string): any;
 

@@ -161,12 +161,6 @@ type Theme {
     icons: JSON
 }
 
-type CurrencyExchangedValue {
-    currency: String!
-    rate: Float!
-    exchangedValue: Float!
-}
-
 type Query {
     schema: String!
     campaigns(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Campaigns! @auth(permission: "campaigns")
@@ -176,7 +170,6 @@ type Query {
     DGE_jackpot(campaignId: ID!, timestamp: JSON!): JSONObject @auth(permission: "campaigns")
     themes(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Themes! @auth(permission: "campaigns")
     defaultThemes: JSONObject @auth(permission: "campaigns")
-    exchangedPrizeValues(baseValue: Float!): [CurrencyExchangedValue!]! @auth(permission: "campaigns")
 }
 
 type Mutation {

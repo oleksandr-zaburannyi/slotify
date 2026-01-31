@@ -89,14 +89,14 @@ export async function initWebsocketServer(server: Server, path: string, service:
 }
 
 export function sendBroadcast(service: string, channel: string, message: any) {
-    logger.debug(`WS broadcast from ${service}, channel ${channel}`, {service, channel, sending: message});
+    logger.info(`WS broadcast from ${service}, channel ${channel}`, {});
     redis.publish(broadcastChannel(service, channel), JSON.stringify(message)).catch(e => {
         logger.warn("Error publishing broadcast message (redis)", {service, channel, message, error: e});
     });
 }
 
 export function sendMessage(service: string, channel: string, playerId: string, message: any) {
-    logger.debug(`WS message from ${service} to player ${playerId}, channel ${channel} `, {playerId, service, channel, sending: message});
+    logger.info(`WS message from ${service} to player ${playerId}, channel ${channel} `, {playerId, sending: message});
     redis.publish(messageChannel(service, channel, playerId), JSON.stringify(message)).catch(e => {
         logger.warn("Error publishing message (redis)", {service, channel, playerId, message, error: e});
     });
@@ -190,7 +190,7 @@ function handleConnectionUpgrade(type: "player" | "system", channel: string, ser
 async function sendRequest(service: string, type: MessageType, data: {channel: string; ip: string; [key: string]: any}): Promise<boolean> {
     return await startCorrelation({sessionId: data.channel, correlationId: v4()}, async () => {
         try {
-            logger.debug(`WS request for service ${service}, channel ${data.channel}, type: ${type}`, {receiving: data.message});
+            logger.info(`WS request for service ${service}, channel ${data.channel}, type: ${type}`, {receiving: data.message});
             const body = JSON.stringify(data);
             const {success} = await fetchAndParse(`${getServiceUrl(service)}/api/websocket/${type}`, {method: "POST", body, headers: {"Content-Type": "application/json"}});
             return success;

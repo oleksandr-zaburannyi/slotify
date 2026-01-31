@@ -71,7 +71,7 @@ export interface IGame<TData = any, TConfig = any, TState = any, TParams = any> 
 
     action?(wager: IWager<TData, TState, TParams, TConfig>, random: IRandom): {action?: string; params?: any};
 
-    simulate?(request: {strategy?: string; wagers: IWager<TData, TState, TParams, TConfig>[]; state?: any; variant?: string}, random: IRandom): {action?: string; params?: any; bet?: number; sideBet?: number};
+    simulate?(request: {strategy?: string; wagers: IWager<TData, TState, TParams, TConfig>[]; state?: any}, random: IRandom): {action?: string; params?: any; bet?: number; sideBet?: number};
 
     evaluate?(type: string | null, wagers: IWager<TData, TState, TParams, TConfig>[], data?: any): any;
 

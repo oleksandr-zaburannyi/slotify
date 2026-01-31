@@ -14,19 +14,10 @@ import {v4} from "uuid";
 import {Game} from "../db/model/Game";
 import {cleanupAfterTests} from "./cleanup";
 import {CurrencyExchange} from "../db/model/CurrencyExchange";
-import {CurrencyAlias} from "../db/model/CurrencyAlias";
 
 const walletConfig = {
     brands: {
         "test-casino-id": {
-            url: "https://example.com/api/tequity",
-            token: "secret-key",
-        },
-        "special-brand": {
-            url: "https://example.com/api/tequity",
-            token: "secret-key",
-        },
-        "other-brand": {
             url: "https://example.com/api/tequity",
             token: "secret-key",
         },
@@ -37,8 +28,6 @@ const walletConfig = {
         bnb: "mbnb",
         ltc: "mltc",
     },
-    currencyAliases: {usd: "usd-global"},
-    currencyAliasesPerBrand: {usd: {"special-brand": "usd-special", "test-casino-id": "usd"}},
 };
 
 const rgsConfig = {
@@ -52,7 +41,6 @@ beforeAll(async () => {
     setEnvVariables();
     await createTestDatabase();
     await createConnections({test: {...dbOptions("adapter")}});
-    await Wallet.delete({id: "a8r"});
     await Wallet.create({id: "a8r", adapter: "softswiss2", config: walletConfig}).save();
     await Rgs.create({id: "test-rgs", adapter: "standard", config: rgsConfig}).save();
     await Rgs.create({id: "test-rgs-without-urls", adapter: "standard", config: {secretKey: "secret-rgs-key"}}).save();
@@ -62,11 +50,6 @@ beforeAll(async () => {
     await CurrencyExchange.create({currency: "pln", rate: 1, date: new Date()}).save();
     await CurrencyExchange.create({currency: "jpy", rate: 1, date: new Date()}).save();
     await CurrencyExchange.create({currency: "ubtc", rate: 1, date: new Date()}).save();
-    await CurrencyExchange.create({currency: "usd", rate: 1, date: new Date()}).save();
-    await CurrencyAlias.create({currency: "usd", alias: "usd-global", multiplier: 1}).save();
-    await CurrencyExchange.create({currency: "usd-global", rate: 1, date: new Date()}).save();
-    await CurrencyAlias.create({currency: "usd", alias: "usd-special", multiplier: 1}).save();
-    await CurrencyExchange.create({currency: "usd-special", rate: 1, date: new Date()}).save();
     api = await initService();
 });
 
@@ -111,9 +94,9 @@ describe("softswiss2 wallet adapter", () => {
         });
     }
 
-    function createSessionRequestParams(options: Partial<{game: string; nativeUserId: string; currency: string; brand: string}> = {}) {
+    function createSessionRequestParams(options: Partial<{game: string; nativeUserId: string; currency: string}> = {}) {
         return {
-            casino_id: options.brand || "test-casino-id",
+            casino_id: "test-casino-id",
             game: options.game || "test-game",
             locale: "en",
             session_id: "SID",
@@ -161,7 +144,6 @@ describe("softswiss2 wallet adapter", () => {
             nativeUserId: string;
             nativeBalance: number;
             currency: string;
-            brand: string;
         }> = {},
     ): Promise<request.Test> {
         const sessionRequestParams = createSessionRequestParams(options);
@@ -801,29 +783,17 @@ describe("softswiss2 wallet adapter", () => {
 
     test("freespins transaction - finished campaign", async () => {
         const authenticateResponse = await sessionsAndAuthenticate({nativeBalance: 1000000, currency: "PLN"});
-        const roundId = v4();
+        const transactionRequestParams = createTransactionRequestParams(authenticateResponse.body.playerId, 1, "freeBets", "test-campaign-id", undefined, undefined, {used: 2, total: 2, totalWin: 1000});
 
-        // First send withdrawal (bet) - required for deposit validation
-        const withdrawRequestParams = createTransactionRequestParams(authenticateResponse.body.playerId, 1, "freeBets", "test-campaign-id", undefined, "withdraw", {used: 1, total: 2, totalWin: 0});
-        withdrawRequestParams.roundId = roundId;
-        queueMockWalletResponse({balance: 1000000});
-        await request(api).put("/rgs/test-rgs/transaction").set(header(withdrawRequestParams)).send(withdrawRequestParams).expect(200);
-
-        // Then send deposit (win) with finished campaign
-        const depositRequestParams = createTransactionRequestParams(authenticateResponse.body.playerId, 1, "freeBets", "test-campaign-id", undefined, "deposit", {used: 2, total: 2, totalWin: 1000});
-        depositRequestParams.roundId = roundId;
         queueMockWalletResponse({data: {campaigns: {items: [{name: "campaign-name"}]}}});
         queueMockWalletResponse({balance: "1000000"});
         queueMockPlatformServiceResponse({campaignType: "freeBets", campaignId: "test-campaign-id"});
 
-        const response = await request(api).put("/rgs/test-rgs/transaction").set(header(depositRequestParams)).send(depositRequestParams).expect(200);
+        const response = await request(api).put("/rgs/test-rgs/transaction").set(header(transactionRequestParams)).send(transactionRequestParams).expect(200);
 
         expect(response.body).toEqual({balance: 1000000});
 
-        // Find the Freespins/Finish call
-        const finishCall = mockedFetch.mock.calls.find(call => String(call[0]).includes("Freespins/Finish"));
-        expect(finishCall).toBeDefined();
-        const [url, requestParams] = finishCall!;
+        const [url, requestParams] = mockedFetch.mock.calls[2]; // balance call
         expect(url).toEqual("https://example.com/api/tequity/v2/provider_a8r.Freespins/Finish");
         expect(requestParams).toEqual({
             body: JSON.stringify({issue_id: "campaign-name", amount: "1000"}),
@@ -835,22 +805,12 @@ describe("softswiss2 wallet adapter", () => {
 
     test("freespins transaction - invalid response from promo service", async () => {
         const authenticateResponse = await sessionsAndAuthenticate({nativeBalance: 1000000, currency: "PLN"});
-        const roundId = v4();
+        const transactionRequestParams = createTransactionRequestParams(authenticateResponse.body.playerId, 1, "freeBets", "test-campaign-id");
 
-        // First send withdrawal (bet) - required for deposit validation
-        const withdrawRequestParams = createTransactionRequestParams(authenticateResponse.body.playerId, 1, "freeBets", "test-campaign-id", undefined, "withdraw", {used: 1, total: 2, totalWin: 0});
-        withdrawRequestParams.roundId = roundId;
-        queueMockWalletResponse({balance: 1000000});
-        await request(api).put("/rgs/test-rgs/transaction").set(header(withdrawRequestParams)).send(withdrawRequestParams).expect(200);
+        queueMockWalletResponse({data: {campaignPlayers: {items: [{finished: true, state: {totalWin: 1000000}}]}}});
+        mockedFetch.mockReturnValueOnce(Promise.resolve(new Response() as Response));
 
-        // Then send deposit (win) with finished campaign
-        const depositRequestParams = createTransactionRequestParams(authenticateResponse.body.playerId, 1, "freeBets", "test-campaign-id", undefined, "deposit", {used: 2, total: 2, totalWin: 1000});
-        depositRequestParams.roundId = roundId;
-        queueMockPlatformServiceResponse({campaignType: "freeBets", campaignId: "test-campaign-id", name: "campaign-name"});
-        // Mock invalid response from Freespins/Finish (empty response without balance)
-        mockedFetch.mockReturnValueOnce(Promise.resolve(new Response(JSON.stringify({})) as Response));
-
-        const response = await request(api).put("/rgs/test-rgs/transaction").set(header(depositRequestParams)).send(depositRequestParams).expect(400);
+        const response = await request(api).put("/rgs/test-rgs/transaction").set(header(transactionRequestParams)).send(transactionRequestParams).expect(400);
 
         expect(response.body).toEqual(expect.objectContaining({error: {message: "Application Error", code: "UNKNOWN"}}));
     });
@@ -879,155 +839,5 @@ describe("softswiss2 wallet adapter", () => {
             id_provider: expect.any(String),
             event_id: depositRequestParams.campaignId,
         });
-    });
-
-    // Currency aliases tests - wallet sends USD, adapter converts to usd-special/usd-global based on brand
-    test("currency aliases - authenticate with currencyAliasesPerBrand - brand matches", async () => {
-        const authenticateResponse = await sessionsAndAuthenticate({
-            nativeUserId: "native-ss2-alias-1",
-            nativeBalance: 100,
-            currency: "USD",
-            brand: "special-brand",
-        });
-
-        expect(authenticateResponse.body.currency).toEqual("usd-special");
-        expect(authenticateResponse.body.balance).toEqual(100);
-
-        const player = await Player.findOneBy({nativeId: "native-ss2-alias-1_usd-special", wallet: "a8r"});
-        expect(player?.currency).toEqual("usd-special");
-    });
-
-    test("currency aliases - authenticate with currencyAliases fallback - brand not in currencyAliasesPerBrand", async () => {
-        const authenticateResponse = await sessionsAndAuthenticate({
-            nativeUserId: "native-ss2-alias-2",
-            nativeBalance: 200,
-            currency: "USD",
-            brand: "other-brand",
-        });
-
-        expect(authenticateResponse.body.currency).toEqual("usd-global");
-        expect(authenticateResponse.body.balance).toEqual(200);
-
-        const player = await Player.findOneBy({nativeId: "native-ss2-alias-2_usd-global", wallet: "a8r"});
-        expect(player?.currency).toEqual("usd-global");
-    });
-
-    test("currency aliases - transaction uses toWalletCurrency with currencyAliasesPerBrand priority - withdraw", async () => {
-        const authenticateResponse = await sessionsAndAuthenticate({
-            nativeUserId: "native-ss2-alias-3",
-            nativeBalance: 500,
-            currency: "USD",
-            brand: "special-brand",
-        });
-        const {playerId} = authenticateResponse.body;
-        const roundId = v4();
-
-        mockTransactionWalletResponse(450);
-        const withdrawParams = {amount: 50, type: "withdraw", provider: "test-provider", game: "test-game", rgsTransactionId: "ss2-txn-withdraw-" + v4(), roundId, playerId};
-        await request(api).put("/rgs/test-rgs/transaction").set(header(withdrawParams)).send(withdrawParams).expect(200);
-
-        const [, withdrawRequestParams] = mockedFetch.mock.calls[mockedFetch.mock.calls.length - 1];
-        const withdrawBody = JSON.parse(withdrawRequestParams!.body!.toString());
-        expect(withdrawBody.currency).toEqual("USD");
-    });
-
-    test("currency aliases - transaction uses toWalletCurrency with currencyAliasesPerBrand priority - deposit", async () => {
-        const authenticateResponse = await sessionsAndAuthenticate({
-            nativeUserId: "native-ss2-alias-4",
-            nativeBalance: 600,
-            currency: "USD",
-            brand: "special-brand",
-        });
-        const {playerId} = authenticateResponse.body;
-        const roundId = v4();
-
-        mockTransactionWalletResponse(550);
-        const withdrawParams = {amount: 50, type: "withdraw", provider: "test-provider", game: "test-game", rgsTransactionId: "ss2-txn-withdraw2-" + v4(), roundId, playerId};
-        await request(api).put("/rgs/test-rgs/transaction").set(header(withdrawParams)).send(withdrawParams).expect(200);
-
-        mockTransactionWalletResponse(650);
-        const depositParams = {amount: 100, type: "deposit", provider: "test-provider", game: "test-game", rgsTransactionId: "ss2-txn-deposit-" + v4(), roundId, playerId};
-        await request(api).put("/rgs/test-rgs/transaction").set(header(depositParams)).send(depositParams).expect(200);
-
-        const [, depositRequestParams] = mockedFetch.mock.calls[mockedFetch.mock.calls.length - 1];
-        const depositBody = JSON.parse(depositRequestParams!.body!.toString());
-        expect(depositBody.currency).toEqual("USD");
-    });
-
-    test("currency aliases - transaction uses toWalletCurrency with currencyAliases fallback", async () => {
-        const authenticateResponse = await sessionsAndAuthenticate({
-            nativeUserId: "native-ss2-alias-5",
-            nativeBalance: 700,
-            currency: "USD",
-            brand: "other-brand",
-        });
-        const {playerId} = authenticateResponse.body;
-        expect(authenticateResponse.body.currency).toEqual("usd-global");
-        const roundId = v4();
-
-        mockTransactionWalletResponse(650);
-        const withdrawParams = {amount: 50, type: "withdraw", provider: "test-provider", game: "test-game", rgsTransactionId: "ss2-txn-fallback-withdraw-" + v4(), roundId, playerId};
-        await request(api).put("/rgs/test-rgs/transaction").set(header(withdrawParams)).send(withdrawParams).expect(200);
-
-        const [, withdrawRequestParams] = mockedFetch.mock.calls[mockedFetch.mock.calls.length - 1];
-        const withdrawBody = JSON.parse(withdrawRequestParams!.body!.toString());
-        expect(withdrawBody.currency).toEqual("USD");
-
-        mockTransactionWalletResponse(750);
-        const depositParams = {amount: 100, type: "deposit", provider: "test-provider", game: "test-game", rgsTransactionId: "ss2-txn-fallback-deposit-" + v4(), roundId, playerId};
-        await request(api).put("/rgs/test-rgs/transaction").set(header(depositParams)).send(depositParams).expect(200);
-
-        const [, depositRequestParams] = mockedFetch.mock.calls[mockedFetch.mock.calls.length - 1];
-        const depositBody = JSON.parse(depositRequestParams!.body!.toString());
-        expect(depositBody.currency).toEqual("USD");
-    });
-
-    test("currency aliases - cancel uses toWalletCurrency with currencyAliasesPerBrand priority", async () => {
-        const authenticateResponse = await sessionsAndAuthenticate({
-            nativeUserId: "native-ss2-alias-cancel-1",
-            nativeBalance: 500,
-            currency: "USD",
-            brand: "special-brand",
-        });
-        const {playerId} = authenticateResponse.body;
-        const roundId = v4();
-
-        mockTransactionWalletResponse(450);
-        const withdrawParams = {amount: 50, type: "withdraw", provider: "test-provider", game: "test-game", rgsTransactionId: "ss2-txn-cancel-brand-" + v4(), roundId, playerId};
-        await request(api).put("/rgs/test-rgs/transaction").set(header(withdrawParams)).send(withdrawParams).expect(200);
-
-        mockTransactionWalletResponse(500);
-        const cancelParams = {rgsTransactionId: withdrawParams.rgsTransactionId};
-        await request(api).delete("/rgs/test-rgs/cancel").set(header(cancelParams)).send(cancelParams).expect(200);
-
-        const [cancelUrl, cancelRequestParams] = mockedFetch.mock.calls[mockedFetch.mock.calls.length - 1];
-        expect(cancelUrl).toContain("/Rollback");
-        const cancelBody = JSON.parse(cancelRequestParams!.body!.toString());
-        expect(cancelBody.currency).toEqual("USD");
-    });
-
-    test("currency aliases - cancel uses toWalletCurrency with currencyAliases fallback", async () => {
-        const authenticateResponse = await sessionsAndAuthenticate({
-            nativeUserId: "native-ss2-alias-cancel-2",
-            nativeBalance: 600,
-            currency: "USD",
-            brand: "other-brand",
-        });
-        const {playerId} = authenticateResponse.body;
-        expect(authenticateResponse.body.currency).toEqual("usd-global");
-        const roundId = v4();
-
-        mockTransactionWalletResponse(550);
-        const withdrawParams = {amount: 50, type: "withdraw", provider: "test-provider", game: "test-game", rgsTransactionId: "ss2-txn-cancel-fallback-" + v4(), roundId, playerId};
-        await request(api).put("/rgs/test-rgs/transaction").set(header(withdrawParams)).send(withdrawParams).expect(200);
-
-        mockTransactionWalletResponse(600);
-        const cancelParams = {rgsTransactionId: withdrawParams.rgsTransactionId};
-        await request(api).delete("/rgs/test-rgs/cancel").set(header(cancelParams)).send(cancelParams).expect(200);
-
-        const [cancelUrl, cancelRequestParams] = mockedFetch.mock.calls[mockedFetch.mock.calls.length - 1];
-        expect(cancelUrl).toContain("/Rollback");
-        const cancelBody = JSON.parse(cancelRequestParams!.body!.toString());
-        expect(cancelBody.currency).toEqual("USD");
     });
 });

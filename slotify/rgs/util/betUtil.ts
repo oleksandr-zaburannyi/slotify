@@ -61,8 +61,7 @@ export async function getBetsBulk(provider: string | undefined, games: string[],
 export async function getAvailableBets(provider: string, game: string, currency: string, wallet: string, operator: string, brand?: string, jurisdiction?: string, roomId?: string) {
     const settingsFilter = {provider, game, currency, wallet, operator, brand, jurisdiction};
     const variant = (await Settings.getValues(settingsFilter)).gameVariant;
-    const room = roomId ? await Room.findOneByOrFail({roomId}) : undefined;
-    const result = await getBets(provider, game, variant, currency, wallet, operator, brand, jurisdiction, {}, room);
+    const result = await getBets(provider, game, variant, currency, wallet, operator, brand, jurisdiction, {}, roomId);
     const {decimals, rate} = await Currency.getFixedRate(currency, settingsFilter);
     for (const action in result) {
         result[action].available = generateAvailable(result[action].available, decimals, rate, maxBetsInFreeBets);
@@ -134,14 +133,16 @@ const getAdapterCurrencies = cache(
     ["currencyRates"],
 );
 
-export async function getBaseCurrencyBetConfig(settingsFilter: ISettingsFilter, room: Room = {} as Room): Promise<IBetConfig> {
+export async function getBaseCurrencyBetConfig(settingsFilter: ISettingsFilter, roomId?: string): Promise<IBetConfig> {
     const defaultBetConfig: IBetConfig = {minBet: 0.01, maxBet: 10000, maxExposure: 10000000};
     const settingBetConfig: Partial<IBetConfig> = await Settings.getBetConfig(settingsFilter);
 
     const betConfig = Object.assign(defaultBetConfig, clearEmpty(settingBetConfig));
 
-    const minBet = Math.max(betConfig.minBet, room.minBet || 0);
-    const maxBet = Math.min(betConfig.maxBet, room.maxBet || Infinity);
+    const roomConfig = roomId ? await Room.findOneByOrFail({roomId}) : ({} as Room);
+
+    const minBet = Math.max(betConfig.minBet, roomConfig.minBet || 0);
+    const maxBet = Math.min(betConfig.maxBet, roomConfig.maxBet || Infinity);
 
     return {
         minBet,
@@ -180,8 +181,8 @@ export function getMaxExposure(baseCurrencyBetConfig: IBetConfig, sessionBetConf
     return sessionBetConfig.maxExposure == null ? round(baseCurrencyBetConfig.maxExposure * rate, decimals) : round(sessionBetConfig.maxExposure, decimals);
 }
 
-export async function getBetLimits(currency: string, settingsFilter: ISettingsFilter, sessionData: ISessionData, room?: Room): Promise<IBetLimits> {
-    const baseCurrencyBetConfig = await getBaseCurrencyBetConfig(settingsFilter, room);
+export async function getBetLimits(currency: string, settingsFilter: ISettingsFilter, sessionData: ISessionData, roomId?: string): Promise<IBetLimits> {
+    const baseCurrencyBetConfig = await getBaseCurrencyBetConfig(settingsFilter, roomId);
 
     const {rate, decimals} = await getCurrencyFixedRate(currency, settingsFilter, sessionData);
 
@@ -221,13 +222,13 @@ export async function getBets(
     brand: string | undefined,
     jurisdiction: string | undefined,
     sessionData: ISessionData,
-    room?: Room,
+    roomId?: string,
 ): Promise<Record<string, IBet>> {
     const settingsFilter = {wallet, operator, brand, jurisdiction, provider, game, currency};
     const customBets = await Settings.getCustomBets(settingsFilter);
     const bets = await getGameBets(provider, game, variant);
 
-    const betLimits = await getBetLimits(currency, settingsFilter, sessionData, room);
+    const betLimits = await getBetLimits(currency, settingsFilter, sessionData, roomId);
 
     const gameBets: Record<string, IBet> = {};
     for (const action in bets) {

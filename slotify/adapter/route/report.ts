@@ -50,8 +50,6 @@ export async function players(sort: ISort | undefined, filter: IFilter[] = [], l
         {alias: "brand", sql: "player.brand", filters: ["IN", "LIKE", "EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
         {alias: "group", sql: "player.group", filters: ["IN", "LIKE", "EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
         {alias: "blocked", sql: "player.blocked", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
-        {alias: "excludedFromInspection", sql: `(SELECT excluded FROM (${ReportExclusion.EXCLUSION_CHECK_SQL("player.id", "player.operator", "player.brand", "NOW()", "inspection")}) _e1)`, filters: ["EQUAL"]},
-        {alias: "excludedFromReports", sql: `(SELECT excluded FROM (${ReportExclusion.EXCLUSION_CHECK_SQL("player.id", "player.operator", "player.brand", "NOW()", "gameWin")}) _e2)`, filters: ["EQUAL"]},
     ];
 
     account.wallets && filter?.push({field: "wallet", type: "IN", value: account.wallets});
@@ -452,10 +450,15 @@ export async function DGE_gameSummary(sort: ISort | undefined, filter: IFilter[]
         {alias: "brand", sql: "player.brand", group: true, filters: ["IN", "EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "LIKE"]},
     ];
     const columnsBetWin: IColumn[] = [
+        {alias: "bets", sql: "count(case when type = 'withdraw' then 1 end)"},
+        {alias: "wins", sql: "count(case when type = 'deposit' then 1 end)"},
         {alias: "totalBet", sql: `sum(case when type = 'withdraw' then amount else 0 end)`},
         {alias: "totalWin", sql: `sum(case when type = 'deposit' then amount else 0 end)`},
     ];
-    const columnsCancel: IColumn[] = [{alias: "totalWin", sql: `sum(case when type = 'withdraw' then amount else 0 end)`, filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"]}];
+    const columnsCancel: IColumn[] = [
+        {alias: "wins", sql: "count(case when type = 'withdraw' then 1 end)", filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"]},
+        {alias: "totalWin", sql: `sum(case when type = 'withdraw' then amount else 0 end)`, filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"]},
+    ];
 
     const {start, end} = getPreviousDayInTimezone(options?.timestamp || Date.now(), "America/New_York");
     const filterBet: IFilter[] = [
@@ -498,19 +501,18 @@ export async function DGE_gameSummary(sort: ISort | undefined, filter: IFilter[]
             return true;
         });
         if (item) {
+            item.wins = round(parseInt(item.wins, 10) + parseInt(cancel.wins, 10), 0);
             item.totalWin = round(parseFloat(item.totalWin) + parseFloat(cancel.totalWin), 2);
         } else {
-            item = {...cancel, totalBet: 0};
+            item = {...cancel, bets: 0, totalBet: 0};
             items.push(item);
         }
     }
 
     for (const item of items) {
         item.gameWin = round(parseFloat(item.totalBet) - parseFloat(item.totalWin), 2);
-        const dateObj = new Date(start!);
-        item.date = `${String(dateObj.getMonth() + 1).padStart(2, "0")}/${String(dateObj.getDate()).padStart(2, "0")}/${dateObj.getFullYear()}`; //format mm/dd/yyyy
-        delete item.wallet;
-        delete item.operator;
+        item.from = start;
+        item.to = end;
     }
     return {items};
 }

@@ -119,8 +119,6 @@ type Player {
     jurisdiction: String
     group: String
     blocked: Boolean
-    excludedFromInspection: Boolean
-    excludedFromReports: Boolean
 }
 type Players {
     meta: Meta
@@ -240,9 +238,14 @@ type GameWin {
 }
 
 type DGEGameSummaryItem {
-    date: String
+    from: String
+    to: String
     game: String
+    wallet: String
+    operator: String
     brand: String
+    bets: Int
+    wins: Int
     totalBet: Float
     totalWin: Float
     gameWin: Float

@@ -1,8 +1,6 @@
 import {Room} from "../db/model/Room";
 import {getConnectionsPerRoom} from "./websocket";
 import {ISettingsFilter, Settings} from "../db/model/Settings";
-import {Draw} from "../db/model/Draw";
-import {getConnection} from "@slotify/shared/lib/dbOptions";
 
 export async function rooms(provider: string, game: string, currency: string, wallet: string, operator: string, brand?: string, jurisdiction?: string): Promise<{rooms: {roomId: string}[]}> {
     const connections = await getConnectionsPerRoom();
@@ -23,11 +21,4 @@ export async function rooms(provider: string, game: string, currency: string, wa
         .map(({roomId, config, provider, game, name, provablyFair}) => ({name, provider, game, config, roomId, connections: connections[roomId] || 0, provablyFair: !!provablyFair}));
 
     return {rooms};
-}
-
-export async function roomHistory(roomId: string): Promise<{draws: {drawId: string; createdAt: Date}[]}> {
-    const draws = (await getConnection("replica").getRepository(Draw).createQueryBuilder("draw").where("draw.roomId = :roomId", {roomId}).andWhere("draw.finished = true").orderBy("draw.createdAt", "DESC").limit(10).getMany()).map(draw => {
-        return {drawId: draw.drawId, createdAt: draw.createdAt};
-    });
-    return {draws};
 }

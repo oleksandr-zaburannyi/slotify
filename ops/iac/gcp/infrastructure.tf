@@ -1,13 +1,13 @@
 provider "google-beta" {
   project = var.project
-  region  = var.region
-  zone    = var.zone
+  region = var.region
+  zone = var.zone
 }
 
 provider "google" {
   project = var.project
-  region  = var.region
-  zone    = var.zone
+  region = var.region
+  zone = var.zone
 }
 
 resource "google_project_service" "compute" {
@@ -41,11 +41,11 @@ resource "google_project_service" "monitoring" {
 /// DOMAIN
 
 resource "google_dns_record_set" "app" {
-  count   = length(local.domains)
+  count = length(local.domains)
   project = var.top-project
-  name    = "${var.env}.${local.domains[count.index]}."
-  type    = "A"
-  ttl     = 300
+  name = "${var.env}.${local.domains[count.index]}."
+  type = "A"
+  ttl = 300
 
   managed_zone = local.dns-zones[count.index]
   rrdatas = [
@@ -55,11 +55,11 @@ resource "google_dns_record_set" "app" {
 }
 
 resource "google_dns_record_set" "cdn" {
-  count        = length(local.domains)
-  project      = var.top-project
-  name         = "cdn-${var.env}.${local.domains[count.index]}."
-  type         = "A"
-  ttl          = 300
+  count = length(local.domains)
+  project = var.top-project
+  name = "cdn-${var.env}.${local.domains[count.index]}."
+  type = "A"
+  ttl = 300
   managed_zone = local.dns-zones[count.index]
   rrdatas = [
     google_compute_global_address.cdn[count.index].address
@@ -69,7 +69,7 @@ resource "google_dns_record_set" "cdn" {
 
 resource "google_compute_managed_ssl_certificate" "certificate" {
   count = length(local.domains)
-  name  = "cert${count.index > 0 ? count.index : ""}"
+  name = "cert${count.index > 0 ? count.index : ""}"
 
   managed {
     domains = [
@@ -81,32 +81,32 @@ resource "google_compute_managed_ssl_certificate" "certificate" {
 // NETWORK
 
 resource "google_compute_network" "vpc_network" {
-  name                    = "custom-network1"
+  name = "custom-network1"
   auto_create_subnetworks = false
-  depends_on              = [google_project_service.service_networking]
+  depends_on = [google_project_service.service_networking]
 }
 
 resource "google_compute_subnetwork" "subnet" {
-  name          = "subnet-1"
-  network       = google_compute_network.vpc_network.name
+  name = "subnet-1"
+  network = google_compute_network.vpc_network.name
   ip_cidr_range = "192.168.1.0/24"
 }
 
 resource "google_compute_router" "router" {
-  name    = "router"
+  name = "router"
   network = google_compute_network.vpc_network.name
 }
 
 resource "google_compute_router_nat" "nat" {
-  name                               = "nat-config"
-  router                             = google_compute_router.router.name
+  name = "nat-config"
+  router = google_compute_router.router.name
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
-  nat_ip_allocate_option             = "MANUAL_ONLY"
+  nat_ip_allocate_option = "MANUAL_ONLY"
   nat_ips = [
     google_compute_address.outbound.self_link
   ]
-  min_ports_per_vm                    = 128
-  enable_dynamic_port_allocation      = true
+  min_ports_per_vm = 128
+  enable_dynamic_port_allocation = true
   enable_endpoint_independent_mapping = false
   log_config {
     enable = true
@@ -115,7 +115,7 @@ resource "google_compute_router_nat" "nat" {
 }
 
 resource "google_compute_firewall" "firewall" {
-  name    = "firewall"
+  name = "firewall"
   network = google_compute_network.vpc_network.name
   source_ranges = [
     "35.235.240.0/20"
@@ -129,13 +129,13 @@ resource "google_compute_firewall" "firewall" {
 }
 
 resource "google_compute_address" "outbound" {
-  name       = "cluster-external-ip"
+  name = "cluster-external-ip"
   depends_on = [google_project_service.service_networking]
 }
 
 resource "google_compute_global_address" "external" {
-  count      = length(local.domains)
-  name       = "external-ip${count.index > 0 ? count.index : ""}"
+  count = length(local.domains)
+  name = "external-ip${count.index > 0 ? count.index : ""}"
   depends_on = [google_project_service.service_networking]
 }
 
@@ -144,9 +144,9 @@ resource "kubernetes_manifest" "pod_monitoring" {
 
   manifest = {
     apiVersion = "monitoring.googleapis.com/v1"
-    kind       = "PodMonitoring"
+    kind = "PodMonitoring"
     metadata = {
-      name      = "pod-monitoring"
+      name = "pod-monitoring"
       namespace = kubernetes_namespace.app-namespace.metadata[0].name
     }
     spec = {
@@ -157,39 +157,37 @@ resource "kubernetes_manifest" "pod_monitoring" {
       }
       endpoints = [
         {
-          port     = "container-port"
-          path     = "/metrics"
+          port = "container-port"
+          path = "/metrics"
           interval = "${var.prometheus-scrape-interval}s"
         }
       ]
     }
   }
-
-  depends_on = [kubernetes_job.wait_for_gmp_operator]
 }
 
 // CLUSTER
 
 resource "google_container_cluster" "cluster" {
-  name     = "cluster"
+  name = "cluster"
   location = var.cluster-availability == "REGIONAL" ? var.region : var.zone
 
   //noinspection ConflictingProperties
   remove_default_node_pool = var.cluster-autopilot ? null : true
-  enable_autopilot         = var.cluster-autopilot ? true : null
-  initial_node_count       = var.cluster-initial-node-count
+  enable_autopilot = var.cluster-autopilot ? true : null
+  initial_node_count = var.cluster-initial-node-count
 
   private_cluster_config {
     enable_private_endpoint = false
-    enable_private_nodes    = true
-    master_ipv4_cidr_block  = "172.16.0.0/28"
+    enable_private_nodes = true
+    master_ipv4_cidr_block = "172.16.0.0/28"
     master_global_access_config {
       enabled = false
     }
   }
 
   ip_allocation_policy {
-    cluster_ipv4_cidr_block  = "10.64.0.0/14"
+    cluster_ipv4_cidr_block = "10.64.0.0/14"
     services_ipv4_cidr_block = "10.68.0.0/20"
   }
 
@@ -202,7 +200,7 @@ resource "google_container_cluster" "cluster" {
     }
   }
 
-  network    = google_compute_network.vpc_network.name
+  network = google_compute_network.vpc_network.name
   subnetwork = google_compute_subnetwork.subnet.name
 
   depends_on = [google_project_service.container, google_project_service.compute, google_compute_network.vpc_network]
@@ -210,21 +208,21 @@ resource "google_container_cluster" "cluster" {
 
 resource "google_container_node_pool" "primary_nodes" {
   count = var.cluster-autopilot ? 0 : var.cluster-node-pools
-  name  = count.index == 0 ? "my-node-pool" : "my-node-pool${count.index}"
+  name = count.index == 0 ? "my-node-pool" : "my-node-pool${count.index}"
   # lifecycle {
   #   ignore_changes = [
   #     node_config
   #   ]
   # }
   location = google_container_cluster.cluster.location
-  cluster  = google_container_cluster.cluster.name
+  cluster = google_container_cluster.cluster.name
 
   upgrade_settings {
     strategy = "BLUE_GREEN"
     blue_green_settings {
       node_pool_soak_duration = "120s"
       standard_rollout_policy {
-        batch_node_count    = 1
+        batch_node_count = 1
         batch_soak_duration = "30s"
       }
     }
@@ -232,13 +230,13 @@ resource "google_container_node_pool" "primary_nodes" {
 
   initial_node_count = 1
   autoscaling {
-    min_node_count  = var.cluster-min-nodes
-    max_node_count  = var.cluster-max-nodes
+    min_node_count = var.cluster-min-nodes
+    max_node_count = var.cluster-max-nodes
     location_policy = "BALANCED"
   }
 
   node_config {
-    spot         = var.spot_instances
+    spot = var.spot_instances
     disk_size_gb = var.cluster-disk-size
     machine_type = var.cluster-machine-type
     oauth_scopes = [
@@ -250,165 +248,17 @@ resource "google_container_node_pool" "primary_nodes" {
   depends_on = [google_container_cluster.cluster]
 }
 
-# Dependency gate for Kubernetes resources
-# Ensures the cluster is fully ready before any kubernetes_* resources are created
-resource "terraform_data" "cluster_ready" {
-  input = {
-    cluster_id       = google_container_cluster.cluster.id
-    cluster_endpoint = google_container_cluster.cluster.endpoint
-    cluster_ca_cert  = google_container_cluster.cluster.master_auth[0].cluster_ca_certificate
-  }
-
-  depends_on = [
-    google_container_cluster.cluster,
-    google_container_node_pool.primary_nodes
-  ]
-}
-
-# RBAC for GMP operator wait job
-resource "kubernetes_service_account" "gmp_wait" {
-  count = var.enable-prometheus-monitoring ? 1 : 0
-  metadata {
-    name      = "gmp-wait"
-    namespace = "gmp-system"
-  }
-  depends_on = [terraform_data.cluster_ready]
-}
-
-resource "kubernetes_cluster_role" "gmp_wait" {
-  count = var.enable-prometheus-monitoring ? 1 : 0
-  metadata {
-    name = "gmp-wait"
-  }
-  rule {
-    api_groups = ["apps"]
-    resources  = ["deployments"]
-    verbs      = ["get"]
-  }
-  rule {
-    api_groups = [""]
-    resources  = ["endpoints"]
-    verbs      = ["get"]
-  }
-}
-
-resource "kubernetes_cluster_role_binding" "gmp_wait" {
-  count = var.enable-prometheus-monitoring ? 1 : 0
-  metadata {
-    name = "gmp-wait"
-  }
-  role_ref {
-    api_group = "rbac.authorization.k8s.io"
-    kind      = "ClusterRole"
-    name      = kubernetes_cluster_role.gmp_wait[0].metadata[0].name
-  }
-  subject {
-    kind      = "ServiceAccount"
-    name      = kubernetes_service_account.gmp_wait[0].metadata[0].name
-    namespace = "gmp-system"
-  }
-}
-
-# Wait for GMP operator webhook to be ready before creating PodMonitoring resources
-# Uses a Kubernetes Job for portability (no local kubectl/gcloud required)
-resource "kubernetes_job" "wait_for_gmp_operator" {
-  count = var.enable-prometheus-monitoring ? 1 : 0
-
-  metadata {
-    name      = "wait-for-gmp-operator-${substr(sha256(google_container_cluster.cluster.id), 0, 8)}"
-    namespace = "gmp-system"
-  }
-
-  spec {
-    backoff_limit = 0
-
-    template {
-      metadata {
-        labels = {
-          app = "wait-for-gmp-operator"
-        }
-      }
-      spec {
-        service_account_name = kubernetes_service_account.gmp_wait[0].metadata[0].name
-
-        container {
-          name  = "wait"
-          image = "bitnami/kubectl@sha256:b349e60a6ae2969af84a778c0b976b050a0cc77f4fb6a4ad44307cd0a06e9d8f"
-
-          command = ["/bin/sh", "-c"]
-          args = [<<-EOT
-            set -e
-            echo "Waiting for GMP operator webhook to be ready..."
-
-            MAX_WAIT=1200
-            SLEEP=5
-            MAX_SLEEP=60
-            ELAPSED=0
-
-            while [ $ELAPSED -lt $MAX_WAIT ]; do
-              echo "Checking GMP operator status (elapsed: $${ELAPSED}s)..."
-
-              AVAILABLE=$(kubectl get deployment gmp-operator -n gmp-system \
-                -o jsonpath='{.status.availableReplicas}' 2>/dev/null || echo "0")
-
-              if [ "$AVAILABLE" != "" ] && [ "$AVAILABLE" -ge 1 ]; then
-                ENDPOINTS=$(kubectl get endpoints gmp-operator -n gmp-system \
-                  -o jsonpath='{.subsets[*].addresses[*].ip}' 2>/dev/null || echo "")
-
-                if [ -n "$ENDPOINTS" ]; then
-                  echo "GMP operator ready (endpoints: $ENDPOINTS)"
-                  exit 0
-                fi
-              fi
-
-              echo "Not ready, waiting $${SLEEP}s..."
-              sleep $SLEEP
-              ELAPSED=$((ELAPSED + SLEEP))
-              SLEEP=$((SLEEP * 2))
-              [ $SLEEP -gt $MAX_SLEEP ] && SLEEP=$MAX_SLEEP
-            done
-
-            echo "ERROR: Timeout after $${MAX_WAIT}s"
-            kubectl get pods -n gmp-system || true
-            exit 1
-          EOT
-          ]
-        }
-
-        restart_policy = "Never"
-      }
-    }
-  }
-
-  wait_for_completion = true
-
-  timeouts {
-    create = "25m"
-  }
-
-  depends_on = [
-    terraform_data.cluster_ready,
-    kubernetes_cluster_role_binding.gmp_wait
-  ]
-}
-
 //REDIS
 
 resource "google_redis_instance" "redis" {
-  name               = "redis"
-  count              = var.redis-enabled ? 1 : 0
-  memory_size_gb     = var.redis-memory-size
-  tier               = var.redis-high-availability ? "STANDARD_HA" : "BASIC"
+  name = "redis"
+  count = var.redis-enabled ? 1 : 0
+  memory_size_gb = var.redis-memory-size
+  tier = var.redis-high-availability ? "STANDARD_HA" : "BASIC"
   authorized_network = google_compute_network.vpc_network.id
   persistence_config {
-    persistence_mode    = "RDB"
+    persistence_mode = "RDB"
     rdb_snapshot_period = "ONE_HOUR"
-  }
-
-  timeouts {
-    create = "20m"
-    update = "20m"
-    delete = "20m"
   }
 
   depends_on = [google_project_service.redis]
@@ -418,8 +268,8 @@ resource "google_redis_instance" "redis" {
 // DATABASE
 
 resource "google_sql_database" "database" {
-  name       = "db"
-  instance   = google_sql_database_instance.instance.name
+  name = "db"
+  instance = google_sql_database_instance.instance.name
   depends_on = [google_project_service.compute]
   lifecycle {
     ignore_changes = [
@@ -429,17 +279,17 @@ resource "google_sql_database" "database" {
 }
 
 resource "google_compute_network" "private_network" {
-  name       = "private-network"
+  name = "private-network"
   depends_on = [google_project_service.service_networking]
 }
 
 resource "google_compute_global_address" "private_ip_address" {
-  count         = length(local.domains)
-  name          = "private-ip-address${count.index > 0 ? count.index : ""}"
-  purpose       = "VPC_PEERING"
-  address_type  = "INTERNAL"
+  count = length(local.domains)
+  name = "private-ip-address${count.index > 0 ? count.index : ""}"
+  purpose = "VPC_PEERING"
+  address_type = "INTERNAL"
   prefix_length = 16
-  network       = google_compute_network.vpc_network.id
+  network = google_compute_network.vpc_network.id
 }
 
 
@@ -452,19 +302,19 @@ resource "google_service_networking_connection" "private_vpc_connection" {
 }
 
 resource "random_password" "database_password" {
-  length           = 16
-  special          = true
+  length = 16
+  special = true
   override_special = "_%@"
 }
 
 resource "random_password" "database_password_app" {
-  length           = 16
-  special          = true
+  length = 16
+  special = true
   override_special = "_%@"
 }
 
 resource "google_sql_database_instance" "instance" {
-  name             = "db"
+  name = "db"
   database_version = var.database-version
   depends_on = [
     google_service_networking_connection.private_vpc_connection
@@ -472,17 +322,17 @@ resource "google_sql_database_instance" "instance" {
 
   settings {
     edition = var.database-edition
-    dynamic "data_cache_config" {
+    dynamic data_cache_config {
       for_each = var.database-edition == "ENTERPRISE_PLUS" ? [1] : []
       content {
         data_cache_enabled = true
       }
     }
-    tier              = var.database-tier
+    tier = var.database-tier
     availability_type = var.database-availability
     ip_configuration {
       private_network = google_compute_network.vpc_network.id
-      dynamic "authorized_networks" {
+      dynamic authorized_networks {
         for_each = var.database-authorized-ips
         content {
           value = authorized_networks.value
@@ -490,62 +340,48 @@ resource "google_sql_database_instance" "instance" {
       }
     }
     backup_configuration {
-      enabled                        = true
+      enabled = true
       point_in_time_recovery_enabled = true
     }
     database_flags {
-      name  = "max_connections"
+      name = "max_connections"
       value = 10000
     }
-    dynamic "database_flags" {
-      for_each = var.database-edition == "ENTERPRISE_PLUS" ? [1] : []
-      content {
-        name  = "cloudsql.enable_index_advisor"
-        value = "on"
-      }
-    }
     insights_config {
-      query_insights_enabled  = true
+      query_insights_enabled = true
       record_application_tags = false
-      record_client_address   = false
-      query_string_length     = 2048
-      query_plans_per_minute  = 5
+      record_client_address = false
+      query_string_length = 2048
     }
-  }
-
-  timeouts {
-    create = "30m"
-    update = "30m"
-    delete = "30m"
   }
 }
 
 resource "google_sql_database_instance" "instance_replica" {
-  count            = var.database-replication ? 1 : 0
-  name             = "replica-db"
+  count = var.database-replication ? 1 : 0
+  name = "replica-db"
   database_version = var.database-version
   depends_on = [
     google_sql_database_instance.instance
   ]
   master_instance_name = "db"
-  deletion_protection  = false
+  deletion_protection = false
 
   replica_configuration {
     failover_target = false
   }
   settings {
-    edition = var.database-replica-edition
-    dynamic "data_cache_config" {
-      for_each = var.database-replica-edition == "ENTERPRISE_PLUS" ? [1] : []
+    edition = var.database-edition
+    dynamic data_cache_config {
+      for_each = var.database-edition == "ENTERPRISE_PLUS" ? [1] : []
       content {
         data_cache_enabled = true
       }
     }
-    tier              = var.database-replica-tier
+    tier = var.database-replica-tier
     availability_type = "ZONAL"
     ip_configuration {
       private_network = google_compute_network.vpc_network.id
-      dynamic "authorized_networks" {
+      dynamic authorized_networks {
         for_each = var.database-authorized-ips
         content {
           value = authorized_networks.value
@@ -555,72 +391,58 @@ resource "google_sql_database_instance" "instance_replica" {
     backup_configuration {
       enabled = false
     }
-    dynamic "database_flags" {
-      for_each = var.database-replica-edition == "ENTERPRISE_PLUS" ? [1] : []
-      content {
-        name  = "cloudsql.enable_index_advisor"
-        value = "on"
-      }
-    }
     database_flags {
-      name  = "max_standby_archive_delay"
+      name = "max_standby_archive_delay"
       value = 300000
       //5min
     }
     database_flags {
-      name  = "max_standby_streaming_delay"
+      name = "max_standby_streaming_delay"
       value = 300000
       //5min
     }
     database_flags {
-      name  = "max_connections"
+      name = "max_connections"
       value = 10000
     }
     database_flags {
-      name  = "hot_standby_feedback"
+      name = "hot_standby_feedback"
       value = "on"
     }
     insights_config {
-      query_insights_enabled  = true
+      query_insights_enabled = true
       record_application_tags = true
-      record_client_address   = true
-      query_string_length     = 4096
-      query_plans_per_minute  = 5
+      record_client_address = true
+      query_string_length = 4096
 
     }
-  }
-
-  timeouts {
-    create = "30m"
-    update = "30m"
-    delete = "30m"
   }
 }
 
 resource "google_sql_user" "users" {
-  name     = "postgres"
+  name = "postgres"
   instance = google_sql_database_instance.instance.name
-  host     = ""
+  host = ""
   password = random_password.database_password.result
 }
 
 resource "google_sql_user" "app_user" {
-  name     = "app"
+  name = "app"
   instance = google_sql_database_instance.instance.name
-  host     = ""
+  host = ""
   password = random_password.database_password_app.result
 }
 
 /// CDN
 
 resource "google_compute_global_address" "cdn" {
-  count      = length(local.domains)
-  name       = "cdn-ip${count.index > 0 ? count.index : ""}"
+  count = length(local.domains)
+  name = "cdn-ip${count.index > 0 ? count.index : ""}"
   depends_on = [google_project_service.service_networking]
 }
 
 resource "google_storage_bucket" "cdn" {
-  name     = var.cdn-bucket != "" ? var.cdn-bucket : "cdn-${var.project}"
+  name = var.cdn-bucket != "" ? var.cdn-bucket : "cdn-${var.project}"
   location = var.bucket-location
 
   uniform_bucket_level_access = true
@@ -636,7 +458,7 @@ resource "google_storage_bucket" "cdn" {
 
   website {
     main_page_suffix = "index.html"
-    not_found_page   = "index.html"
+    not_found_page = "index.html"
   }
   depends_on = [google_project_service.compute]
 }
@@ -644,20 +466,20 @@ resource "google_storage_bucket" "cdn" {
 # Add the bucket as a CDN backend
 resource "google_compute_backend_bucket" "cdn" {
   #  provider = google-beta
-  name             = google_storage_bucket.cdn.name
-  bucket_name      = google_storage_bucket.cdn.name
-  enable_cdn       = true
+  name = google_storage_bucket.cdn.name
+  bucket_name = google_storage_bucket.cdn.name
+  enable_cdn = true
   compression_mode = "AUTOMATIC"
 
   cdn_policy {
-    request_coalescing           = true
-    signed_url_cache_max_age_sec = 30 * 24 * 3600 #30 days
-    client_ttl                   = 24 * 3600      #24 hours
-    default_ttl                  = 30 * 24 * 3600 #30 days
-    max_ttl                      = 30 * 24 * 3600 #30 days
-    serve_while_stale            = 7 * 24 * 3600  #7 days
-    cache_mode                   = "CACHE_ALL_STATIC"
-    negative_caching             = true
+    request_coalescing = true
+    signed_url_cache_max_age_sec = 30*24*3600 #30 days
+    client_ttl = 24*3600 #24 hours
+    default_ttl = 30*24*3600 #30 days
+    max_ttl = 30*24*3600 #30 days
+    serve_while_stale = 7*24*3600 #7 days
+    cache_mode = "CACHE_ALL_STATIC"
+    negative_caching = true
   }
 
 }
@@ -665,7 +487,7 @@ resource "google_compute_backend_bucket" "cdn" {
 # Create HTTPS certificate
 resource "google_compute_managed_ssl_certificate" "website" {
   count = length(local.domains)
-  name  = "cdn${count.index == 0 ? "" : count.index}"
+  name = "cdn${count.index == 0 ? "" : count.index}"
 
   managed {
     domains = [
@@ -677,13 +499,13 @@ resource "google_compute_managed_ssl_certificate" "website" {
 
 # GCP URL MAP
 resource "google_compute_url_map" "cdn" {
-  name            = "cdn"
+  name = "cdn"
   default_service = google_compute_backend_bucket.cdn.self_link
 }
 
 # GCP target proxy
 resource "google_compute_target_https_proxy" "cdn" {
-  name    = "cdn"
+  name = "cdn"
   url_map = google_compute_url_map.cdn.self_link
   ssl_certificates = [
     for i, item in google_compute_managed_ssl_certificate.website : item.self_link
@@ -691,57 +513,57 @@ resource "google_compute_target_https_proxy" "cdn" {
 }
 
 resource "google_compute_target_http_proxy" "cdn" {
-  name    = "cdn"
+  name = "cdn"
   url_map = google_compute_url_map.cdn.self_link
 }
 
 # GCP forwarding rule
 resource "google_compute_global_forwarding_rule" "cdn-ssl" {
-  count                 = length(local.domains)
-  name                  = "cdn-ssl${count.index > 0 ? count.index : ""}"
+  count = length(local.domains)
+  name = "cdn-ssl${count.index > 0 ? count.index : ""}"
   load_balancing_scheme = "EXTERNAL"
-  ip_address            = google_compute_global_address.cdn[count.index].address
-  ip_protocol           = "TCP"
-  port_range            = "443"
-  target                = google_compute_target_https_proxy.cdn.self_link
+  ip_address = google_compute_global_address.cdn[count.index].address
+  ip_protocol = "TCP"
+  port_range = "443"
+  target = google_compute_target_https_proxy.cdn.self_link
 }
 
 resource "google_compute_global_forwarding_rule" "cdn" {
-  count                 = length(local.domains)
-  name                  = "cdn${count.index > 0 ? count.index : ""}"
+  count = length(local.domains)
+  name = "cdn${count.index > 0 ? count.index : ""}"
   load_balancing_scheme = "EXTERNAL"
-  ip_address            = google_compute_global_address.cdn[count.index].address
-  ip_protocol           = "TCP"
-  port_range            = "80"
-  target                = google_compute_target_http_proxy.cdn.self_link
+  ip_address = google_compute_global_address.cdn[count.index].address
+  ip_protocol = "TCP"
+  port_range = "80"
+  target = google_compute_target_http_proxy.cdn.self_link
 }
 resource "google_storage_bucket_iam_binding" "landing_page_iam_binding" {
   bucket = google_storage_bucket.cdn.name
-  role   = "roles/storage.objectViewer"
+  role = "roles/storage.objectViewer"
   members = [
     "allUsers"
   ]
 }
 resource "google_storage_bucket_object" "index" {
-  name          = "index.html"
-  content       = "hello"
-  bucket        = google_storage_bucket.cdn.name
+  name = "index.html"
+  content = "hello"
+  bucket = google_storage_bucket.cdn.name
   cache_control = "max-age=0, no-cache"
 }
 
 resource "google_compute_security_policy" "policy" {
   count = var.security-policy-disable ? 0 : 1
-  name  = "policy"
+  name = "policy"
   #  provider = google-beta
 
   adaptive_protection_config {
     layer_7_ddos_defense_config {
-      enable          = true
+      enable = true
       rule_visibility = "STANDARD"
     }
   }
   rule {
-    action   = "deny(403)"
+    action = "deny(403)"
     priority = 700
     match {
       expr {
@@ -750,7 +572,7 @@ resource "google_compute_security_policy" "policy" {
     }
   }
   rule {
-    action   = "deny(403)"
+    action = "deny(403)"
     priority = 800
     match {
       expr {
@@ -759,7 +581,7 @@ resource "google_compute_security_policy" "policy" {
     }
   }
   rule {
-    action   = "deny(404)"
+    action = "deny(404)"
     priority = 950
     match {
       expr {
@@ -768,8 +590,8 @@ resource "google_compute_security_policy" "policy" {
     }
   }
   rule {
-    action   = "throttle"
-    preview  = !var.rate-limiting
+    action = "throttle"
+    preview = !var.rate-limiting
     priority = 1000
     match {
       expr {
@@ -778,16 +600,16 @@ resource "google_compute_security_policy" "policy" {
     }
     rate_limit_options {
       conform_action = "allow"
-      exceed_action  = "deny(429)"
+      exceed_action = "deny(429)"
       enforce_on_key = "IP"
       rate_limit_threshold {
-        count        = var.rate-limiting-config.requests
+        count = var.rate-limiting-config.requests
         interval_sec = var.rate-limiting-config.seconds
       }
     }
   }
   rule {
-    action   = "allow"
+    action = "allow"
     priority = "2147483647"
     match {
       versioned_expr = "SRC_IPS_V1"
@@ -803,13 +625,13 @@ resource "google_compute_security_policy" "policy" {
 }
 
 resource "random_password" "jwt" {
-  length           = 16
-  special          = true
+  length = 16
+  special = true
   override_special = "_%@"
 }
 
 resource "random_password" "rgs_key" {
-  length           = 16
-  special          = true
+  length = 16
+  special = true
   override_special = "_%@"
 }

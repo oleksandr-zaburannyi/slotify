@@ -399,7 +399,7 @@ export class SoftSwiss2WalletAdapter implements IWalletAdapter {
 
             return {balance: await this.amountFromSoftSwiss(data.balance, currency)};
         } else if (transaction.campaignType === "freeBets") {
-            if (transaction.campaignData!.used === transaction.campaignData?.total) {
+            if (transaction.type === "deposit" && transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) throw new Exception("Couldn't find campaign name");
                 const issueId = campaign.name.replace("softswiss2-api_", "");

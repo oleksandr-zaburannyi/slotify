@@ -6,7 +6,6 @@ import {IPrizeDropCampaignInfo, IPromoToolUi} from "./IPromoToolUi";
 import {Button, Grommet, Tab, Tabs} from "grommet";
 import {findMinimalQualifyingBet} from "../util/findMinimalQualifyingBet";
 import PrizeDropHeaderIcon from "./icon/PrizeDropHeaderIcon";
-import {getItemDisplayValue} from "../util/getItemDisplayValue";
 
 export class PrizeDropUi implements IPromoToolUi {
     private activeBet?: number;
@@ -168,7 +167,7 @@ export class PrizeDropUi implements IPromoToolUi {
                                         prize,
                                         () => connector.formatCurrency(playerState.exchangedCashValues[index]),
                                         () => prize.value + "x " + i18next.t("bet").toLowerCase() + (prize.limit ? ` (${i18next.t("prizeDropCappedAt")} ${connector.formatCurrency(playerState.exchangedLimits[index])})` : ""),
-                                        () => getItemDisplayValue(prize, connector.settings.language),
+                                        () => prize.value,
                                     )}
                                 </b>
                             </li>
@@ -258,7 +257,7 @@ export class PrizeDropUi implements IPromoToolUi {
                                     </>
                                 ),
                                 () => (
-                                    <b>{getItemDisplayValue(prizeWon, connector.settings.language)}</b>
+                                    <b>{prizeWon.value}</b>
                                 ),
                             )}
                         </div>
@@ -361,7 +360,7 @@ export class PrizeDropUi implements IPromoToolUi {
                                                                 "x " +
                                                                 i18next.t("bet").toLowerCase() +
                                                                 (prize.limit ? ` (${i18next.t("prizeDropCappedAt")} ${connector.formatCurrency(playerState.exchangedLimits[index])})` : ""),
-                                                            () => getItemDisplayValue(prize, connector.settings.language),
+                                                            () => prize.value,
                                                         )}
                                                     </b>
                                                 </li>

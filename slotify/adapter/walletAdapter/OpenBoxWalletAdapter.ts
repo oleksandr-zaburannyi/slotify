@@ -1,6 +1,6 @@
 import {Player} from "../db/model/Player";
 import IWalletAdapter, {ISession, IWalletAuthenticate, IWalletBalance, IWalletTransaction} from "./IWalletAdapter";
-import {Router, Request} from "express";
+import {Express, Request} from "express";
 import {correlationData} from "@slotify/shared/lib/asyncContext";
 import Exception from "@slotify/shared/lib/Exception";
 import logger from "@slotify/shared/lib/logger";
@@ -48,12 +48,12 @@ export class OpenBoxWalletAdapter implements IWalletAdapter {
     config!: IConfig;
     cipher!: Cipher;
 
-    async init(wallet: string, router: Router, config: any) {
+    async init(wallet: string, api: Express, path: string, config: any) {
         this.wallet = wallet;
         this.config = config;
         this.cipher = new Cipher(this.config.secretKey, this.wallet);
 
-        router.get("/launcher", async (req: Request<unknown, unknown, unknown, ILauncherQueryParams>, res) => {
+        api.get(path + "/launcher", async (req: Request<unknown, unknown, unknown, ILauncherQueryParams>, res) => {
             const key = req.query["token"];
             const brand = req.query["agency-uid"];
             const game = req.query["game-id"];
@@ -75,7 +75,7 @@ export class OpenBoxWalletAdapter implements IWalletAdapter {
             }
         });
 
-        router.get("/sgh", async (req: Request<unknown, unknown, unknown, IStaticGameHistoryParams>, res) => {
+        api.get(path + "/sgh", async (req: Request<unknown, unknown, unknown, IStaticGameHistoryParams>, res) => {
             try {
                 const game = req.query.gameId;
                 const roundId = req.query.gameCycleId;

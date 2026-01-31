@@ -3,7 +3,7 @@ import * as crypto from "crypto";
 import fetch from "@slotify/shared/lib/fetch";
 import {Player} from "../db/model/Player";
 import IWalletAdapter, {IWalletTransaction} from "./IWalletAdapter";
-import {Router, NextFunction, Request, Response} from "express";
+import {Express, NextFunction, Request, Response} from "express";
 import {round} from "@slotify/shared/lib/round";
 import {readFileSync} from "fs";
 import * as xml2js from "xml2js";
@@ -45,8 +45,6 @@ interface IConfig {
     secretKey: string;
     includeProviderInGame?: boolean;
     timeout?: number;
-    currencyAliases?: Record<string, string>;
-    currencyAliasesPerBrand?: Record<string, Record<string, string>>;
 }
 
 const forceConversion: Record<string, string> = {
@@ -74,7 +72,7 @@ export class SoftSwissWalletAdapter implements IWalletAdapter {
         res.status(403).json({code: errorCodes.SERVER_UNAUTHORIZED, message: "Couldn't authorize the server"});
     }
 
-    async init(wallet: string, router: Router, config: IConfig) {
+    async init(wallet: string, api: Express, path: string, config: IConfig) {
         this.wallet = wallet;
         this.config = config;
 
@@ -82,7 +80,7 @@ export class SoftSwissWalletAdapter implements IWalletAdapter {
 
         await this.initRatios();
 
-        router.post("/demo", this.validateServer.bind(this), async (req: Request<unknown, unknown, IDemoBody>, res: Response) => {
+        api.post(path + "/demo", this.validateServer.bind(this), async (req: Request<unknown, unknown, IDemoBody>, res: Response) => {
             const game = Game.removeProviderPrefix(config, req.body.game);
             const language = req.body.locale;
             const lobbyUrl = req.body.urls.return_url;
@@ -93,7 +91,7 @@ export class SoftSwissWalletAdapter implements IWalletAdapter {
             res.json(response);
         });
 
-        router.post("/sessions", this.validateServer.bind(this), async (req: Request<unknown, unknown, ISessionsBody>, res: Response) => {
+        api.post(path + "/sessions", this.validateServer.bind(this), async (req: Request<unknown, unknown, ISessionsBody>, res: Response) => {
             const operator = "softswiss";
             const brand = req.body.casino_id;
             const currency = req.body.currency.toLowerCase();
@@ -106,14 +104,14 @@ export class SoftSwissWalletAdapter implements IWalletAdapter {
             const nickname = req.body.user.nickname;
             const country = req.body.user.country?.toLowerCase();
             const gender = req.body.user.gender;
-            const key = this.cipher!.encrypt(JSON.stringify({nativeId, currency: this.convertCurrencyFrom(currency, brand), brand, jurisdiction, country, nickname, gender, timestamp: Date.now()}));
+            const key = this.cipher!.encrypt(JSON.stringify({nativeId, currency: this.convertCurrencyFrom(currency), brand, jurisdiction, country, nickname, gender, timestamp: Date.now()}));
 
             const launchUrl = await launch("real", {wallet, operator, lobbyUrl, language, game, depositUrl, key}, req);
             const response: ILaunchResponse = {launch_options: {game_url: launchUrl, strategy: "detect"}};
             res.json(response);
         });
 
-        router.post("/freespins/issue", this.validateServer.bind(this), async (req: Request<unknown, unknown, IFreeSpinsIssueBody>, res: Response) => {
+        api.post(path + "/freespins/issue", this.validateServer.bind(this), async (req: Request<unknown, unknown, IFreeSpinsIssueBody>, res: Response) => {
             const wallets = [wallet];
             const operator = "softswiss";
             const brand = req.body.casino_id;
@@ -165,7 +163,7 @@ export class SoftSwissWalletAdapter implements IWalletAdapter {
             }
         });
 
-        router.post("/freespins/cancel", this.validateServer.bind(this), async (req: Request<unknown, unknown, IFreeSpinsCancelBody>, res: Response) => {
+        api.post(path + "/freespins/cancel", this.validateServer.bind(this), async (req: Request<unknown, unknown, IFreeSpinsCancelBody>, res: Response) => {
             const name = "softswiss-api_" + req.body.issue_id;
 
             try {
@@ -278,7 +276,7 @@ export class SoftSwissWalletAdapter implements IWalletAdapter {
         }
 
         const token = key;
-        const params = {user_id: nativeId, currency: this.convertCurrencyTo(currency, brand), game: Game.addProviderPrefix(this.config, provider, game)};
+        const params = {user_id: nativeId, currency: this.convertCurrencyTo(currency), game: Game.addProviderPrefix(this.config, provider, game)};
         const data = await this.fetch<IBalanceParams, IBalanceResponse>("/play", "POST", params);
         const {balance} = data;
         if (typeof balance !== "number") throw new Exception("Incorrect balance returned", {data: {data, balance, nativeId}});
@@ -288,7 +286,7 @@ export class SoftSwissWalletAdapter implements IWalletAdapter {
 
     async balance(player: Player, provider: string, game: string) {
         const {currency, nativeId} = player;
-        const params = {user_id: nativeId, currency: this.convertCurrencyTo(currency, player.brand!), game: Game.addProviderPrefix(this.config, provider, game)};
+        const params = {user_id: nativeId, currency: this.convertCurrencyTo(currency), game: Game.addProviderPrefix(this.config, provider, game)};
         const data = await this.fetch<IBalanceParams, IBalanceResponse>("/play", "POST", params);
         const {balance} = data;
 
@@ -320,7 +318,7 @@ export class SoftSwissWalletAdapter implements IWalletAdapter {
         } else {
             const params: IPlayParams = {
                 user_id: nativeId,
-                currency: this.convertCurrencyTo(currency, player.brand!),
+                currency: this.convertCurrencyTo(currency),
                 game: Game.addProviderPrefix(this.config, transaction.provider!, transaction.game!),
                 game_id: transaction.roundId,
                 finished: transaction.roundFinished,
@@ -357,7 +355,7 @@ export class SoftSwissWalletAdapter implements IWalletAdapter {
         const {currency, nativeId} = player;
         const params: IRollbackParams = {
             user_id: nativeId,
-            currency: this.convertCurrencyTo(currency, player.brand!),
+            currency: this.convertCurrencyTo(currency),
             game: Game.addProviderPrefix(this.config, transaction.provider!, transaction.game!),
             game_id: transaction.roundId,
             actions: [
@@ -405,78 +403,24 @@ export class SoftSwissWalletAdapter implements IWalletAdapter {
     }
 
     //convert currency to SS format
-    private convertCurrencyTo(currency: string, brand?: string): string {
-        // First apply toWalletCurrency (reverse alias lookup)
-        const walletCurrency = this.toWalletCurrency(currency, brand);
-        // Then apply reverse forceConversion
+    private convertCurrencyTo(currency: string) {
         for (const c in forceConversion) {
-            if (forceConversion[c] === walletCurrency) return c.toUpperCase();
+            if (forceConversion[c] === currency) return c.toUpperCase();
         }
-        return walletCurrency.toUpperCase();
+        return currency.toUpperCase();
     }
 
     //convert currency from SS format
-    private convertCurrencyFrom(currency: string, brand?: string): string {
-        // First apply forceConversion
-        const converted = forceConversion[currency.toLowerCase()] || currency.toLowerCase();
-        // Then apply fromWalletCurrency (alias lookup)
-        return this.fromWalletCurrency(converted, brand);
-    }
-
-    private fromWalletCurrency(walletCurrency: string, brand?: string): string {
-        if (brand && this.config.currencyAliasesPerBrand?.[walletCurrency]?.[brand]) {
-            return this.config.currencyAliasesPerBrand[walletCurrency][brand];
-        }
-        if (this.config.currencyAliases?.[walletCurrency]) {
-            return this.config.currencyAliases[walletCurrency];
-        }
-        return walletCurrency;
-    }
-
-    private toWalletCurrency(currency: string, brand?: string): string {
-        if (this.config.currencyAliasesPerBrand && brand) {
-            for (const [walletCurrency, aliasesPerBrand] of Object.entries(this.config.currencyAliasesPerBrand)) {
-                if (aliasesPerBrand[brand] === currency) {
-                    return walletCurrency;
-                }
-            }
-        }
-        if (this.config.currencyAliases) {
-            for (const [walletCurrency, alias] of Object.entries(this.config.currencyAliases)) {
-                if (alias === currency) {
-                    return walletCurrency;
-                }
-            }
-        }
-        return currency;
+    private convertCurrencyFrom(currency: string) {
+        return forceConversion[currency.toLowerCase()] || currency.toLowerCase();
     }
 
     private async getCurrencyRatio(currency: string): Promise<{power: number; ratio: number}> {
         let ratio = 1;
-        // Check if currency is from forceConversion
-        const forceAlias = Object.values(forceConversion).includes(currency) && (await CurrencyAlias.findOneBy({alias: currency}));
-        if (forceAlias) {
-            ratio = forceAlias.multiplier;
-            currency = forceAlias.currency;
-        }
-        // Check if currency is an alias from currencyAliases
-        if (Object.values(this.config.currencyAliases || {}).includes(currency)) {
-            const alias = await CurrencyAlias.findOneBy({alias: currency});
-            if (alias) {
-                ratio = alias.multiplier;
-                currency = alias.currency;
-            }
-        }
-        // Check if currency is an alias from currencyAliasesPerBrand
-        for (const aliasesPerBrand of Object.values(this.config.currencyAliasesPerBrand || {})) {
-            if (Object.values(aliasesPerBrand).includes(currency)) {
-                const alias = await CurrencyAlias.findOneBy({alias: currency});
-                if (alias) {
-                    ratio = alias.multiplier;
-                    currency = alias.currency;
-                }
-                break;
-            }
+        const alias = Object.values(forceConversion).includes(currency) && (await CurrencyAlias.findOneBy({alias: currency}));
+        if (alias) {
+            ratio = alias.multiplier;
+            currency = alias.currency;
         }
 
         if (this.ratios[currency] === undefined) throw new Exception("Couldn't find currency ratio", {data: {currency}});

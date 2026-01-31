@@ -174,7 +174,7 @@ async function initApi(api: Express) {
         async function (req, res) {
             const {playerId, nickname, nativeId, wallet, operator, brand, transactionId, amount, provider, game, roundId, roundFinished, currency, jurisdiction, category} = req.body;
             const player: IPlayer = {playerId, nickname, nativeId, wallet, operator, brand, provider, game, currency, jurisdiction};
-            const mode = req.params.mode as "withdraw" | "deposit" | "withdrawFinished" | "depositFinished" | "cancel" | "withdrawFailed";
+            const mode = req.params.mode as "withdraw" | "deposit" | "withdrawFinished" | "depositFinished" | "cancel";
 
             res.json(await transactions(mode, player, {amount, roundId, roundFinished, game, transactionId, category}));
         },

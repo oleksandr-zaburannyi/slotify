@@ -1,5 +1,4 @@
 import React, {useRef} from "react";
-import {Link} from "react-router-dom";
 import {DataTable, tableFilter} from "../components/DataTable";
 import {Button, Form, message, Modal} from "antd";
 import {PlayCircleOutlined} from "@ant-design/icons";
@@ -22,7 +21,7 @@ const Sessions = () => {
         {title: "Ended at", dataIndex: "endedAt", render: (endedAt: string) => (endedAt ? new Date(endedAt).toLocaleString() : ""), sorter: true, ...tableFilter("TIME")},
         {title: "Active", dataIndex: "active", sorter: true, render: (value: boolean) => <StatusTag status={value.toString()} />},
         {title: "Session Id", dataIndex: "sessionId", sorter: true, ...tableFilter("EQUAL")},
-        {title: "Player Id", dataIndex: "playerId", render: (playerId: string) => <Link to={`/players/${playerId}`}>{playerId}</Link>, sorter: true, ...tableFilter("EQUAL")},
+        {title: "Player Id", dataIndex: "playerId", sorter: true, ...tableFilter("EQUAL")},
         {title: "Provider", dataIndex: "provider", sorter: true, ...tableFilter("LIKE")},
         {title: "Game", dataIndex: "game", sorter: true, ...tableFilter("LIKE")},
         {title: "Data", dataIndex: "data", render: (data: any) => data && <JsonView collapsed={true} enableClipboard={false} src={data} />},

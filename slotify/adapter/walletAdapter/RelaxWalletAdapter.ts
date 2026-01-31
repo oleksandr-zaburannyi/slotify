@@ -1,5 +1,5 @@
 import IWalletAdapter, {ISession, IWalletAuthenticate, IWalletBalance, IWalletTransaction} from "./IWalletAdapter";
-import {Router, NextFunction, Request, Response} from "express";
+import {Express, NextFunction, Request, Response} from "express";
 import Exception, {IExceptionPopup} from "@slotify/shared/lib/Exception";
 import logger from "@slotify/shared/lib/logger";
 import fetch, {fetchAndParse} from "@slotify/shared/lib/fetch";
@@ -44,7 +44,6 @@ type IConfig = {
     platformCode: string;
     providers: Record<string, {code: string; name: string; rng?: {identification: string; softwareid: string}}>;
     timeout?: number;
-    currencyAliases?: Record<string, string>;
     currencyAliasesPerBrand?: Record<string, Record<string, string>>;
     cancelDelay?: number;
 };
@@ -58,12 +57,12 @@ export class RelaxWalletAdapter implements IWalletAdapter {
     config!: IConfig;
     cipher!: Cipher;
 
-    async init(wallet: string, router: Router, config: IConfig, whitelistedIps?: string[]) {
+    async init(wallet: string, api: Express, path: string, config: IConfig, whitelistedIps?: string[]) {
         this.wallet = wallet;
         this.config = config;
         this.cipher = new Cipher(this.config.user + ":" + this.config.password, this.wallet);
 
-        router.get("/launcher", async (req: Request<unknown, unknown, unknown, ILauncherQueryParams>, res: any) => {
+        api.get(path + "/launcher", async (req: Request<unknown, unknown, unknown, ILauncherQueryParams>, res: any) => {
             const game = req.query["gameid"];
             const ticket = req.query["ticket"];
             const language = req.query["lang"];
@@ -117,7 +116,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             res.redirect(launchUrl);
         });
 
-        router.post("/replay/get", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        api.post(path + "/replay/get", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             try {
                 const roundId = req.body.roundid;
                 const [language] = (req.body.locale || "en_US").toLowerCase().split("_");
@@ -162,7 +161,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             }
         });
 
-        router.post("/freespins/add", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        api.post(path + "/freespins/add", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             try {
                 const {txid, campaignId} = await this.createFreeBets(req.body);
 
@@ -176,7 +175,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             }
         });
 
-        router.post("/freespins/get", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        api.post(path + "/freespins/get", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             try {
                 const {playerid} = req.body;
                 const nativeId = playerid.toString();
@@ -240,7 +239,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             }
         });
 
-        router.post("/games/getgames", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        api.post(path + "/games/getgames", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             const {currency, credentials} = req.body;
             const brand = credentials.partnerid;
 
@@ -276,7 +275,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             res.json({games});
         });
 
-        router.post("/freespins/cancel", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        api.post(path + "/freespins/cancel", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             try {
                 const {freespinsid, playerid} = req.body;
                 const campaignId = freespinsid;
@@ -296,7 +295,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             }
         });
 
-        router.post("/finalize", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        api.post(path + "/finalize", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             const {roundid, sessionid, partnerid} = req.body;
             try {
                 const timestamp = Date.now() + 5 * 60 * 1000;
@@ -320,7 +319,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             }
         });
 
-        router.post("/round/getstate", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        api.post(path + "/round/getstate", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             const {roundid} = req.body;
 
             let gameref = null;
@@ -626,9 +625,6 @@ export class RelaxWalletAdapter implements IWalletAdapter {
         if (brand && this.config.currencyAliasesPerBrand?.[relaxCurrency]?.[brand]) {
             return this.config.currencyAliasesPerBrand[relaxCurrency][brand];
         }
-        if (this.config.currencyAliases?.[relaxCurrency]) {
-            return this.config.currencyAliases[relaxCurrency];
-        }
         return relaxCurrency.toLowerCase();
     }
 
@@ -636,13 +632,6 @@ export class RelaxWalletAdapter implements IWalletAdapter {
         if (this.config.currencyAliasesPerBrand && brand) {
             for (const [relaxCurrency, aliasesPerBrand] of Object.entries(this.config.currencyAliasesPerBrand)) {
                 if (aliasesPerBrand[brand] === currency) {
-                    return relaxCurrency;
-                }
-            }
-        }
-        if (this.config.currencyAliases) {
-            for (const [relaxCurrency, alias] of Object.entries(this.config.currencyAliases)) {
-                if (alias === currency) {
                     return relaxCurrency;
                 }
             }

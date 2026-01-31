@@ -146,7 +146,7 @@ export async function campaign(campaignId: string, player: IPlayer) {
     const {loadCampaignState, loadPlayerState} = lazyLoadState(getConnection("primary").manager, campaignId, playerId);
 
     let campaignState = await loadCampaignState(true);
-    campaignState = removeUnderscoredKeys(tool.accumulator ? campaignState.data : campaignState);
+    campaignState = tool.accumulator ? {latestAccumulationData: removeUnderscoredKeys(campaignState.latestAccumulationData)} : removeUnderscoredKeys(await loadCampaignState(true));
 
     return {
         campaignId,
@@ -269,7 +269,7 @@ export async function playerFeed(campaignId: string, playerId: string, params: a
     return await tool.playerFeed({params, config, start, end, ...lazyLoadState(getConnection("primary").manager, campaignId, playerId, true)});
 }
 
-export async function transactions(mode: "withdraw" | "deposit" | "withdrawFinished" | "depositFinished" | "cancel" | "withdrawFailed", player: IPlayer, transaction: ITransactionRequest) {
+export async function transactions(mode: "withdraw" | "deposit" | "withdrawFinished" | "depositFinished" | "cancel", player: IPlayer, transaction: ITransactionRequest) {
     const {transactionId, roundId} = transaction;
     const {playerId} = player;
     const prizes: CampaignPrize[] = [];
@@ -288,8 +288,7 @@ export async function transactions(mode: "withdraw" | "deposit" | "withdrawFinis
     response.callFinished = campaigns.some(({tool}) => !!tool[finishedMode]);
 
     if (hasAnyToolCalls) {
-        const needsWithdrawLookup = mode === "cancel" || mode === "withdrawFailed";
-        const withdrawResponse = needsWithdrawLookup ? await CampaignResponse.findOneBy({responseId: "withdraw_" + transactionId}) : null;
+        const withdrawToCancel = mode === "cancel" ? await CampaignResponse.findOneBy({responseId: "withdraw_" + transactionId}) : null;
 
         await getConnection("primary").transaction(async manager => {
             for (const {campaignId, walletCampaignId, tool, config, type, start, end} of campaigns) {
@@ -297,8 +296,8 @@ export async function transactions(mode: "withdraw" | "deposit" | "withdrawFinis
 
                 const func = tool[mode];
                 response.campaigns.push(campaignId);
-                const withdrawProcessedForCleanup = !needsWithdrawLookup || withdrawResponse?.response.campaigns.includes(campaignId);
-                if (func && withdrawProcessedForCleanup) {
+                const withdrawProcessedForCancels = mode !== "cancel" || withdrawToCancel?.response.campaigns.includes(campaignId);
+                if (func && withdrawProcessedForCancels) {
                     const request: any = {config, player, ...lazyLoadState(manager, campaignId, playerId), transaction, start, end};
 
                     if (tool.accumulator) {

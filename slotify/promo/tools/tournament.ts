@@ -2,16 +2,14 @@ import Exception from "@slotify/shared/lib/Exception";
 import {ITool} from "../util/ITool";
 import {getCurrencies} from "../util/currencyRates";
 import exchangePrizeValue from "../util/exchangePrizeValue";
-import validateCampaignPrizes, {IPrizeConfig, validateCurrencyOverrides} from "../util/validateCampaignPrizes";
+import validateCampaignPrizes, {IPrizeConfig} from "../util/validateCampaignPrizes";
 import {fetchAndParse} from "@slotify/shared/lib/fetch";
 import sum from "@slotify/shared/lib/sum";
 import {getServiceUrl} from "@slotify/shared/lib/urls";
 import {precisionNumbersMapper} from "../util/precisionNumbersMapper";
-import {incrementQualifiedBets, isQualifyingBet} from "../util/qualifiedBets";
 
 type ICampaignConfig = {
     qualifyingBet: number;
-    qualifyingBetOverrides?: Record<string, number>;
     baseBetOnly: boolean;
     prizes: IPrizeConfig[];
 };
@@ -28,7 +26,6 @@ type ICampaignState = {
     _leaderboardPlayerIds: (string | null)[];
 };
 type IPlayerState = {
-    qualifiedBets?: number;
     playerCurrency: string;
     exchangedQualifyingBet: number;
     exchangedCashValues: number[];
@@ -37,8 +34,6 @@ type IPlayerState = {
 
 function validateCommonConfig(config: ICampaignConfig, end: number) {
     if (typeof config.qualifyingBet !== "number") throw new Exception("Qualifying Bet needs to be configured");
-
-    validateCurrencyOverrides(config.qualifyingBetOverrides, "Qualifying bet");
 
     if (typeof config.baseBetOnly !== "boolean") throw new Exception("Base Bet Only flag needs to be configured");
 
@@ -140,8 +135,6 @@ export const tournament: ITool<ICampaignConfig, IPlayerState, ICampaignState> = 
 
         if (previousCampaign.config.qualifyingBet !== config.qualifyingBet) throw new Exception("Qualifying bet cannot be edited");
 
-        if (JSON.stringify(previousCampaign.config.qualifyingBetOverrides) !== JSON.stringify(config.qualifyingBetOverrides)) throw new Exception("Qualifying bet overrides cannot be edited");
-
         return previousState;
     },
 
@@ -149,47 +142,20 @@ export const tournament: ITool<ICampaignConfig, IPlayerState, ICampaignState> = 
         const campaignState = await loadCampaignState(true);
 
         const currencyRate = campaignState._campaignCurrencyRates[player.currency];
-        if (currencyRate === undefined) {
-            throw new Exception(`Currency ${player.currency} not found in campaign rates`);
-        }
-
-        // Check for qualifying bet currency override, fall back to exchange calculation
-        const exchangedQualifyingBet = config.qualifyingBetOverrides?.[player.currency] ?? config.qualifyingBet * currencyRate;
+        const exchangedQualifyingBet = config.qualifyingBet * currencyRate;
 
         // lazy append exchanged cash values if player with a given currency requests init
         const shouldUpdateExchangedCashValues = campaignState._exchangedCashValues[player.currency] === undefined;
-        const exchangedCashValues = shouldUpdateExchangedCashValues
-            ? config.prizes.map(prize => {
-                  if (prize.type !== "cash") return 0;
-                  // Check for prize currency override, fall back to exchange calculation
-                  return prize.currencyOverrides?.[player.currency] ?? exchangePrizeValue(prize.value as number, currencyRate);
-              })
-            : campaignState._exchangedCashValues[player.currency];
+        const exchangedCashValues = shouldUpdateExchangedCashValues ? config.prizes.map(prize => (prize.type === "cash" ? exchangePrizeValue(prize.value as number, currencyRate) : 0)) : campaignState._exchangedCashValues[player.currency];
 
         campaignState._exchangedCashValues[player.currency] = exchangedCashValues;
 
         return {
             playerState: {
-                qualifiedBets: 0,
                 exchangedQualifyingBet,
                 exchangedCashValues,
             },
             campaignState,
-        };
-    },
-
-    async withdrawFinished({transaction, loadPlayerState}): Promise<any> {
-        const playerState = await loadPlayerState();
-
-        if (!isQualifyingBet(transaction.amount, playerState.exchangedQualifyingBet)) {
-            return {};
-        }
-
-        return {
-            playerState: {
-                ...playerState,
-                qualifiedBets: incrementQualifiedBets(playerState.qualifiedBets),
-            },
         };
     },
 
@@ -206,7 +172,7 @@ export const tournament: ITool<ICampaignConfig, IPlayerState, ICampaignState> = 
         const mainBet = precisionNumbersMapper(transaction.amount / winRatio, 8);
 
         const playerState = await loadPlayerState();
-        if (!isQualifyingBet(mainBet, playerState.exchangedQualifyingBet)) {
+        if (mainBet < playerState.exchangedQualifyingBet) {
             return;
         }
 

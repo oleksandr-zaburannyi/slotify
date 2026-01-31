@@ -248,7 +248,7 @@ export class Connector {
         this.emitter.on("refreshBalance", () => this.balance().then(({balance}) => this.callbacks?.balanceChanged?.(balance)));
     }
 
-    public async fetch(method: "POST" | "GET", path: string, data: any, reloadOnError: boolean = true, server?: string) {
+    private async fetch(method: "POST" | "GET", path: string, data: any, reloadOnError: boolean = true, server?: string) {
         let response: Response;
         let json: any;
         const encryptionKey = v4();
@@ -623,7 +623,7 @@ export class Connector {
         this.roundId = (complete && !wager.next?.length) || parallelRound ? null : roundId;
 
         await this.emitter.emit("wager", {wager: {...wager, bet}, balance, roundId});
-        if (complete && !wager.next?.length) await this.emitter.emit("stopped", {roundId, balance, finalWin: complete.finalWin});
+        if (complete && !wager.next?.length) await this.emitter.emit("stopped", {roundId, balance});
         if (balance) {
             await this.emitter.emit("balance", {balance});
         }
@@ -1007,7 +1007,6 @@ export class Connector {
         let pingInterval: NodeJS.Timeout | null = null;
         let pongTimeout: NodeJS.Timeout | null = null;
         const encryptionKey = this.settings.enc ? v4() : "";
-        let manualClose = false;
 
         const clearPingTimers = () => {
             if (pingInterval) {
@@ -1045,7 +1044,6 @@ export class Connector {
             };
 
             ws.onopen = () => {
-                manualClose = false;
                 onConnected();
                 retryCounter = 0;
 
@@ -1064,7 +1062,7 @@ export class Connector {
                 clearPingTimers();
                 onDisconnected();
                 ws = null;
-                if (manualClose || event.reason === "Unauthorized") {
+                if (event.reason === "Unauthorized") {
                     return;
                 }
                 const delay = retryTimeout[Math.min(retryCounter, retryTimeout.length - 1)] * 1000;
@@ -1085,7 +1083,6 @@ export class Connector {
                 ws.send(data);
             },
             close: () => {
-                manualClose = true;
                 this.websocketApis.delete(websocketApi);
                 if (!ws) throw new Error("WebSocket is not connected");
                 ws.close();

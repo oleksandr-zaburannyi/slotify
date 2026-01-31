@@ -5,13 +5,12 @@ import currencies from "../route/currencies";
 import cache from "@slotify/shared/lib/cache";
 import {sendAlert} from "@slotify/shared/lib/sendAlert";
 import {Transaction} from "../db/model/Transaction";
-import {ReportExclusion} from "../db/model/ReportExclusion";
 
 const getCurrencies = cache(10 * 60, currencies, ["currencyRates"]);
 
 const formatCurrency = (value: number, currency: string) => new Intl.NumberFormat("en-US", {minimumFractionDigits: 2, maximumFractionDigits: 2}).format(value) + " " + currency;
 
-const alertText = (transaction: ITransaction, player: Player, totalBet: number, totalWin: number, betInBaseCurrency: number, winInBaseCurrency: number, winRatio: number, exclusionReason?: string) => `
+const alertText = (transaction: ITransaction, player: Player, totalBet: number, totalWin: number, betInBaseCurrency: number, winInBaseCurrency: number, winRatio: number) => `
     Win: ${formatCurrency(totalWin, player.currency)} ${player.currency === process.env.BASE_CURRENCY ? "" : "(" + formatCurrency(winInBaseCurrency, process.env.BASE_CURRENCY!) + ")"}<br/>
     Bet: ${formatCurrency(totalBet, player.currency)} ${player.currency === process.env.BASE_CURRENCY ? "" : "(" + formatCurrency(betInBaseCurrency, process.env.BASE_CURRENCY!) + ")"}<br/>
     Win ratio (main bet): x${(transaction.winRatio || winRatio).toFixed(2)}<br/>
@@ -23,8 +22,7 @@ const alertText = (transaction: ITransaction, player: Player, totalBet: number, 
     Player id: ${player.id}<br/>
     Player nativeId: ${player.nativeId}<br/>
     Player group: ${player.group || ""}<br/>
-    Exclusion reason: ${exclusionReason || ""}<br/>
-
+    
     <br/>
     <a href="${process.env.URL}/backoffice/rounds/${transaction.roundId}">Open in Back office</a> <br/>
 `;
@@ -44,13 +42,12 @@ export async function alerting(config: IConfig, transaction: ITransaction, trans
     if (config.maxWin != null && transaction.type === "deposit" && winInBaseCurrency >= config.maxWin && !isPlayerExcluded) {
         alerts.push("Big win amount");
     }
-    if (config.maxWinRatio != null && transaction.type === "deposit" && transaction.winRatio! >= config.maxWinRatio && !isPlayerExcluded) {
+    if (config.maxWinRatio != null && transaction.type === "deposit" && transaction.winRatio! >= config.maxWinRatio) {
         alerts.push("Big win ratio");
     }
 
     if (alerts.length > 0) {
-        const {reason: exclusionReason} = await ReportExclusion.isPlayerExcluded(player.id);
         const title = `[alert] ${alerts.join(", ")}`;
-        sendAlert(title, alertText(transaction, player, totalBet, totalWin, betInBaseCurrency, winInBaseCurrency, totalWin / totalBet, exclusionReason));
+        sendAlert(title, alertText(transaction, player, totalBet, totalWin, betInBaseCurrency, winInBaseCurrency, totalWin / totalBet));
     }
 }
