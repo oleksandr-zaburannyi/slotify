@@ -2,6 +2,7 @@ import React from "react";
 import {Code, DollarSign, FileText, Gift, Home, Settings as SettingsIcon, Shield, TrendingUp, Users} from "react-feather";
 import Accounts from "../pages/Accounts";
 import Round from "../pages/Round";
+import Player from "../pages/Player";
 import GraphiQLViewer from "../components/GraphiQLViewer";
 import GameWin from "../pages/GameWin";
 import WalletVerifier from "../components/WalletVerifier";
@@ -45,6 +46,7 @@ const routes = (state: any): IRoute[] => [
         icon: <Users strokeWidth={2} size={16} />,
         children: [
             {path: "/rounds/:id", name: "Rounds", content: <Round />, visible: false},
+            {path: "/players/:id", name: "Player", content: <Player />, visible: false},
             {path: "/transactions", name: "Transactions", content: <Transactions />, visible: !!state?.account?.permissions?.includes("transactions") && !!state?.services?.includes("adapter")},
             {path: "/players", name: "Players", content: <Players />, visible: !!state?.account?.permissions?.includes("players") && !!state?.services?.includes("adapter")},
             {path: "/sessions", name: "Sessions", content: <Sessions />, visible: !!state?.account?.permissions?.includes("sessions") && !!state?.services?.includes("adapter")},

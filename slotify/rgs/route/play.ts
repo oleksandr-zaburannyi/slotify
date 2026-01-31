@@ -308,11 +308,11 @@ export default async function play(
                     `Player has been blocked due to usage of incorrect API (${error.message})<br/>
                     Player Id: ${playerId}<br/>
                     Player nativeId: ${player.nativeId}<br/>
-                    Player nickname: ${player.nickname}<br/>
+                    Player nickname: ${player.nickname || ""}<br/>
                     Game: ${game}<br/>
                     Wallet: ${wallet}<br/>
                     Operator: ${operator}<br/>
-                    Brand: ${brand}<br/><br/>
+                    Brand: ${brand || ""}<br/><br/>
                     <a href="${process.env.URL}/backoffice/rounds/${roundId}">Open in Back office</a><br/>
                     `,
                 );

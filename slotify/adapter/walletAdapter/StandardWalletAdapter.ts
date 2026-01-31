@@ -4,7 +4,7 @@ import fetch from "@slotify/shared/lib/fetch";
 import {Player} from "../db/model/Player";
 import IWalletAdapter, {ISession, IWalletTransaction} from "./IWalletAdapter";
 import {isDevMode} from "@slotify/shared/lib/isDevMode";
-import {Express} from "express";
+import {Router} from "express";
 import logger from "@slotify/shared/lib/logger";
 import {correlationData} from "@slotify/shared/lib/asyncContext";
 import {clearEmpty} from "@slotify/shared/lib/clearEmpty";
@@ -27,6 +27,7 @@ interface IConfig {
     cancelUsePost?: string;
     overwriteGame?: string;
     useOriginalToken?: boolean;
+    currencyAliases?: Record<string, string>;
     currencyAliasesPerBrand?: Record<string, Record<string, string>>;
     hostname?: string;
 }
@@ -36,14 +37,17 @@ export class StandardWalletAdapter implements IWalletAdapter {
     config!: IConfig;
     __debug: any;
 
-    private fromWalletCurrency(walletCurrency: string, brand: string = ""): string {
+    private fromWalletCurrency(walletCurrency: string, brand?: string): string {
         if (brand && this.config.currencyAliasesPerBrand?.[walletCurrency]?.[brand]) {
             return this.config.currencyAliasesPerBrand[walletCurrency][brand];
+        }
+        if (this.config.currencyAliases?.[walletCurrency]) {
+            return this.config.currencyAliases[walletCurrency];
         }
         return walletCurrency;
     }
 
-    private toWalletCurrency(currency: string, brand: string = "") {
+    private toWalletCurrency(currency: string, brand?: string): string {
         if (this.config.currencyAliasesPerBrand && brand) {
             for (const [walletCurrency, aliasesPerBrand] of Object.entries(this.config.currencyAliasesPerBrand)) {
                 if (aliasesPerBrand[brand] === currency) {
@@ -51,10 +55,17 @@ export class StandardWalletAdapter implements IWalletAdapter {
                 }
             }
         }
+        if (this.config.currencyAliases) {
+            for (const [walletCurrency, alias] of Object.entries(this.config.currencyAliases)) {
+                if (alias === currency) {
+                    return walletCurrency;
+                }
+            }
+        }
         return currency;
     }
 
-    async init(wallet: string, api: Express, path: string, config: IConfig, whitelistedIps?: string[]) {
+    async init(wallet: string, router: Router, config: IConfig, whitelistedIps?: string[]) {
         this.wallet = wallet;
         this.config = config;
 
@@ -80,8 +91,8 @@ export class StandardWalletAdapter implements IWalletAdapter {
             return {rgsAdapter, rgsConfig, rgsGames};
         };
 
-        api.post(
-            path + "/freeBets/add",
+        router.post(
+            "/freeBets/add",
             ipFilter(whitelistedIps),
             hmac(config.secretKey),
             validate([
@@ -127,8 +138,8 @@ export class StandardWalletAdapter implements IWalletAdapter {
             },
         );
 
-        api.post(
-            path + "/freeBets/remove",
+        router.post(
+            "/freeBets/remove",
             ipFilter(whitelistedIps),
             hmac(config.secretKey),
             validate([body("walletCampaignId").isString().exists(), body("operator").isString().exists(), body("brand").isString().exists(), body("games").isArray().exists()]),
@@ -145,8 +156,8 @@ export class StandardWalletAdapter implements IWalletAdapter {
             },
         );
 
-        api.post(
-            path + "/freeBets/availableBets",
+        router.post(
+            "/freeBets/availableBets",
             ipFilter(whitelistedIps),
             hmac(config.secretKey),
             validate([body("games").isArray().exists(), body("currencies").isArray().exists(), body("operator").isString().exists(), body("brand").isString().exists()]),
@@ -164,13 +175,13 @@ export class StandardWalletAdapter implements IWalletAdapter {
             },
         );
 
-        api.post(path + "/availableGames", ipFilter(whitelistedIps), hmac(config.secretKey), validate([body("operator").isString().optional({nullable: true}), body("brand").isString().optional({nullable: true})]), async (req, res) => {
+        router.post("/availableGames", ipFilter(whitelistedIps), hmac(config.secretKey), validate([body("operator").isString().optional({nullable: true}), body("brand").isString().optional({nullable: true})]), async (req, res) => {
             const operator = req.body.operator;
             const brand = req.body.brand;
             res.json(await availableGames(this.wallet, operator, brand));
         });
 
-        api.post(path + "/launch/:mode", ipFilter(whitelistedIps), hmac(config.secretKey), validate([]), async (req, res) => {
+        router.post("/launch/:mode", ipFilter(whitelistedIps), hmac(config.secretKey), validate([]), async (req, res) => {
             const mode = req.params.mode as "real" | "fun" | "replay";
             res.json({url: await launch(mode, {...req.body, hostname: config.hostname})});
         });

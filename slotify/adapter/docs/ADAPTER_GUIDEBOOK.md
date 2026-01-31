@@ -81,7 +81,9 @@ config:
 - `cancelUsePost` (optional): if `true` it will use `POST` for `/cancel` requests
 - `overwriteGame` (optional): if value is specified it will overwrite game params with hardcoded value for all games (used for some multiplayer games)
 - `useOriginalToken` (optional): if value is `true` it will send the token of the original session for retry cancels and transaction calls (instead of the latest which is sent by default)
-- `currencyAliasesPerBrand` (optional): used to map wallet currencies to different RGS currencies per brand
+- `currencyAliases` (optional): used to map wallet currencies to different RGS currencies globally. Example: `{"EUR": "eur-global"}`. Warning: this mapping doesn't work for GraphQL API, if they want free bets they need to use Wallet REST API
+- `currencyAliasesPerBrand` (optional): used to map wallet currencies to different RGS currencies per brand. Takes priority over `currencyAliases`. Warning: this mapping doesn't work for GraphQL API, if they want free bets they need to use Wallet REST API
+  - **When to use**: Use `currencyAliases` when all brands should use the same currency mapping. Use `currencyAliasesPerBrand` when different brands need different currency mappings (e.g., different fixed-rate multipliers per brand). You can use both together: `currencyAliasesPerBrand` takes priority for matching brands, and `currencyAliases` serves as the fallback for other brands.
 - `hostname` (optional): used to replace `${hostname}` with specified value in the RGS urls (used when you want to force using specific domain)
 
 ### SoftSwiss Adapter (deprecated in favour of SoftSwiss v2)
@@ -91,8 +93,16 @@ config:
 
 ```
 {
-  "secretKey": "abc", 
-  "url": "http:/example.com"
+  "secretKey": "abc",
+  "url": "http:/example.com",
+  "currencyAliases": {
+    "ubtc": "ubtc-global"
+  },
+  "currencyAliasesPerBrand": {
+    "ubtc": {
+      "brand1": "ubtc-brand1"
+    }
+  }
 }
 ```
 
@@ -100,6 +110,9 @@ config:
 - `url`: wallet endpoint
 - `includeProviderInGame` (optional): should be `true` for legacy game naming convention `{provider}:{game}`
 - `timeout` (optional): request timeout in seconds (default `15` seconds)
+- `currencyAliases` (optional): used to map currencies (after `forceConversion`) to different RGS currencies globally. Example: `{"ubtc": "ubtc-global"}`
+- `currencyAliasesPerBrand` (optional): used to map currencies (after `forceConversion`) to different RGS currencies per brand (`casino_id`). Takes priority over `currencyAliases`
+  - **When to use**: Use `currencyAliases` when all brands should use the same currency mapping. Use `currencyAliasesPerBrand` when different brands need different currency mappings (e.g., different fixed-rate multipliers per brand). You can use both together: `currencyAliasesPerBrand` takes priority for matching brands, and `currencyAliases` serves as the fallback for other brands.
 
 Settings:
 -`retriesExpiryHours` set to `72` hours
@@ -113,14 +126,16 @@ config:
 ```
 {
   "brands": {
-    "my-brand1": {"url": "http:/example.com/brand1", token: "abc"},
-    "my-brand2": {"url": "http:/example.com/brand2", token: "def"}
-  } 
-  "convertCurrencies": {
-    "btc": "ubtc",
-    "eth": "meth",
-    "bnb": "mbnb",
-    "ltc": "mltc"
+    "my-brand1": {"url": "http:/example.com/brand1", "token": "abc"},
+    "my-brand2": {"url": "http:/example.com/brand2", "token": "def"}
+  },
+  "currencyAliases": {
+    "USD": "usd-global"
+  },
+  "currencyAliasesPerBrand": {
+    "USD": {
+      "my-brand1": "usd-brand1"
+    }
   }
 }
 ```
@@ -128,8 +143,11 @@ config:
 - `brands`: object containing brands (`casino_id`'s) and corresponding endpoint urls and auth tokens
 - `includeProviderInGame` (optional): should be `true` for legacy game naming convention `{provider}:{game}`
 - `timeout` (optional): request timeout in seconds (default `15` seconds)
-- `convertCurrencies` (optional): given SoftSwiss doesn't support `ubtc`, but only `btc` (which is not very readable and not all maths support 2+ decimals) we suggest to covert those players in the wallet. So in our platform we will see
+- `convertCurrencies` (optional, **deprecated** - use `currencyAliases` instead): given SoftSwiss doesn't support `ubtc`, but only `btc` (which is not very readable and not all maths support 2+ decimals) we suggest to covert those players in the wallet. So in our platform we will see
   player with `ubtc` and softswiss will see `btc`.
+- `currencyAliases` (optional): used to map Wallet currencies to different currencies in our system globally. Example: `{"USD": "usd-global"}`
+- `currencyAliasesPerBrand` (optional): used to map Wallet currencies to different currencies in our system per brand (`casino_id`). Takes priority over `currencyAliases`
+  - **When to use**: Use `currencyAliases` when all brands should use the same currency mapping. Use `currencyAliasesPerBrand` when different brands need different currency mappings (e.g., different fixed-rate multipliers per brand). You can use both together: `currencyAliasesPerBrand` takes priority for matching brands, and `currencyAliases` serves as the fallback for other brands.
 - `hostname` (optional): used to replace `${hostname}` with specified value in the RGS urls (used when you want to force using specific domain)
 
 ### Alea Adapter
@@ -263,7 +281,7 @@ adapter: `relax`
 config:
 
 ```
-{ 
+{
   "url": "https://dev-p2p-cdn.api.relaxg.net/p2p/v2",
   "user": "basic-authentication-user",
   "password": "basic-authentication-password",
@@ -276,13 +294,17 @@ config:
     "test-provider-1": {
       "code": "tp1",
       "name": "Test Provider One"
-    },
+    }
+  },
+  "currencyAliases": {
+    "GC.": "gc-default"
+  },
   "currencyAliasesPerBrand": {
     "GC.": {
       "10": "gc-1000000",
       "20": "gc-1000"
     }
-  },
+  }
 }
 ```
 
@@ -291,7 +313,8 @@ config:
 - `password`: Basic access authentication Password, used for both ways communication
 - `platformCode`: platform id assigned for the environment by Relax
 - `providers`: In order to make provider's games enabled for Relax, an entry in `providers` map needs to be created, with `code` assigne by the Relax, and human-readable `name` for a given provider.
-- `currencyAliasesPerBrand`: used to map Relax currencies to different fixed rate multipliers currencies per brand
+- `currencyAliases` (optional): used to map Relax currencies to different fixed rate multipliers currencies globally. Example: `{"GC.": "gc-default"}`
+- `currencyAliasesPerBrand` (optional): used to map Relax currencies to different fixed rate multipliers currencies per brand. Takes priority over `currencyAliases`
 
 Security:
 
@@ -367,7 +390,8 @@ config:
 - `creditApiClientId`: Credit API client id assigned by Light & Wonder
 - `creditApiClientSecret`: Credit API client secret assigned by Light & Wonder
 - `ogsGameIdsMapping`: object indexed map from `ogsgameid` to a `game`
-- `currencyAliasesPerBrand` (optional): used to map LnW currencies to different RGS currencies per brand (`opId`)
+- `currencyAliases` (optional): used to map LnW currencies to different RGS currencies globally. Example: `{"USD": "usd-global"}`
+- `currencyAliasesPerBrand` (optional): used to map LnW currencies to different RGS currencies per brand (`opId`). Takes priority over `currencyAliases`
 
 GCM:
 
@@ -417,12 +441,17 @@ config:
 
 ```
 {
-  "secretKey": "abc", 
-  "gameLaunchPassKey": "def", 
-  "gameResultPassKey": "ghi", 
+  "secretKey": "abc",
+  "gameLaunchPassKey": "def",
+  "gameResultPassKey": "ghi",
   "url": "http:/example.com",
   "currencyAliases": {
-    "eur": "testbrand-eur"
+    "EUR": "testbrand-eur"
+  },
+  "currencyAliasesPerBrand": {
+    "EUR": {
+      "brand1": "eur-brand1"
+    }
   }
 }
 ```
@@ -433,7 +462,8 @@ config:
 - `url`: wallet endpoint
 - `includeProviderInGame` (optional): should be `true` for legacy game naming convention `{provider}:{game}`
 - `timeout` (optional): request timeout in seconds (default `15` seconds)
-- `currencyAliases` (optional): used to map Wallet currencies to different currencies in our system. In the example above our system will see "testbrand-eur" and wallet will see "eur"
+- `currencyAliases` (optional): used to map Wallet currencies to different currencies in our system globally. In the example above our system will see "testbrand-eur" and wallet will see "EUR"
+- `currencyAliasesPerBrand` (optional): used to map Wallet currencies to different currencies in our system per brand (`operatorId`). Takes priority over `currencyAliases`. Example: `{"EUR": {"brand1": "eur-brand1"}}`
 
 ### Reevo Adapter
 
@@ -844,10 +874,10 @@ SFTP configuration should be in the following format:
 {host: "sftp.example.com", port: 22, username: "user", password: "", dir: "/reports"}
 ```
 
-| Report        | Description                                          | Variables                                            | Suggested Cron                        |
-|---------------|------------------------------------------------------|------------------------------------------------------|---------------------------------------|
-| `DGE_reports` | DGE report for New Jersey market                     | {wallet: "my-wallet"}                                | `0 12 * * *	` every day at 12:00 CET  |
-| `DGE_jackpot` | DGE report with pool amounts of the jackpot campaign | {campaignId: "4b2a85a1-208b-4493-9d7f-f58bae130653"} | `0 12 * * *	` every day at 12:00 CET  |
+| Report        | Description                                          | Variables                                            | Suggested Cron                       |
+|---------------|------------------------------------------------------|------------------------------------------------------|--------------------------------------|
+| `DGE_reports` | DGE report for New Jersey market                     | {wallet: "my-wallet"}                                | `0 12 * * *	` every day at 12:00 CET |
+| `DGE_jackpot` | DGE report with pool amounts of the jackpot campaign | {campaignId: "4b2a85a1-208b-4493-9d7f-f58bae130653"} | `0 12 * * *	` every day at 12:00 CET |
 
 ## Restricted territories
 

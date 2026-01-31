@@ -5,7 +5,7 @@ import JsonView from "react18-json-view";
 import useSWR from "swr";
 import useGraphQlFetcher from "../lib/useGraphQlFetcher";
 import StatusTag from "../components/StatusTag";
-import {useParams} from "react-router-dom";
+import {Link, useParams} from "react-router-dom";
 import {DataTable, tableFilter} from "../components/DataTable";
 import {PlayCircleOutlined} from "@ant-design/icons";
 import {ExportButton} from "../components/Buttons";
@@ -137,7 +137,7 @@ const Campaign = () => {
 
     const campaignPlayers: any[] = [
         {title: "Updated at", dataIndex: "updatedAt", render: (createdAt: number) => (createdAt ? new Date(createdAt).toLocaleString() : ""), ...tableFilter("DATE")},
-        {title: "Player Id", dataIndex: "playerId", ...tableFilter("EQUAL")},
+        {title: "Player Id", dataIndex: "playerId", render: (playerId: string) => <Link to={`/players/${playerId}`}>{playerId}</Link>, ...tableFilter("EQUAL")},
         {title: "Init", dataIndex: "init", sorter: true, render: (value?: boolean) => (value === null ? "" : <Tag color={value ? "green" : "red"}>{value?.toString()}</Tag>)},
         {title: "Opt In", dataIndex: "optIn", sorter: true, render: (value?: boolean) => (value === null ? "" : <Tag color={value ? "green" : "red"}>{value?.toString()}</Tag>)},
         {title: "Finished", dataIndex: "finished", sorter: true, render: (value?: boolean) => (value === null ? "" : <Tag color={value ? "green" : "red"}>{value?.toString()}</Tag>)},
@@ -146,13 +146,13 @@ const Campaign = () => {
         {title: "State", dataIndex: "state", render: (state: any) => <JsonLink data={state} />},
         {
             title: "Actions",
-            render: ({playerId, optIn}: any) => state?.account?.permissions?.includes("manageCampaigns") && !optIn && <ClearOptOut playerId={playerId} campaignId={id} onSuccess={() => (dataTable?.current as any)?.revalidate()} />,
+            render: ({playerId, optIn}: any) => state?.account?.permissions?.includes("manageCampaigns") && optIn === false && <ClearOptOut playerId={playerId} campaignId={id} onSuccess={() => (dataTable?.current as any)?.revalidate()} />,
         },
     ];
 
     const campaignPrizes: any[] = [
         {title: "Created at", dataIndex: "createdAt", render: (createdAt: number) => (createdAt ? new Date(createdAt).toLocaleString() : ""), ...tableFilter("DATE")},
-        {title: "Player Id", dataIndex: "playerId", ...tableFilter("EQUAL")},
+        {title: "Player Id", dataIndex: "playerId", render: (playerId: string) => <Link to={`/players/${playerId}`}>{playerId}</Link>, ...tableFilter("EQUAL")},
         {title: "Type", dataIndex: "type", sorter: true, ...tableFilter("LIKE")},
         {title: "Data", dataIndex: "data", hidden: true},
         {

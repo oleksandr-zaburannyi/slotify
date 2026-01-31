@@ -7,6 +7,7 @@ import {CaretRightFill, CirclePlay} from "grommet-icons";
 import TournamentIcon from "./icon/TournamentIcon";
 import {findMinimalQualifyingBet} from "../util/findMinimalQualifyingBet";
 import TournamentHeaderIcon from "./icon/TournamentHeaderIcon";
+import {getItemDisplayValue} from "../util/getItemDisplayValue";
 
 export class TournamentUi implements IPromoToolUi {
     private activeBet?: number;
@@ -153,7 +154,7 @@ export class TournamentUi implements IPromoToolUi {
                                 prize.value && (
                                     <li key={"prize" + index}>
                                         <>{i18next.t("tournamentStartedPrizesMessage", {totalAmount: prize.amount}) + " "}</>
-                                        <b>{prize.type === "cash" ? connector.formatCurrency(playerState.exchangedCashValues[index]) : prize.value}</b>
+                                        <b>{prize.type === "cash" ? connector.formatCurrency(playerState.exchangedCashValues[index]) : getItemDisplayValue(prize, connector.settings.language)}</b>
                                     </li>
                                 )
                             );
@@ -247,7 +248,7 @@ export class TournamentUi implements IPromoToolUi {
                                         {prize.value && (
                                             <>
                                                 {i18next.t("tournamentFinishedPrizeMessage") + " "}
-                                                <b>{prize.type === "cash" ? connector.formatCurrency(exchangedPrizeValue) : prize.value}</b>!
+                                                <b>{prize.type === "cash" ? connector.formatCurrency(exchangedPrizeValue) : getItemDisplayValue(prize, connector.settings.language)}</b>!
                                             </>
                                         )}
                                         <br />
@@ -279,7 +280,7 @@ export class TournamentUi implements IPromoToolUi {
     }
 
     public async showRulesPopup(connector: Connector, campaign: Campaign, config: any, campaignState: any, playerState: any) {
-        const prizeValuesAtPositions = config.prizes.flatMap((prize: any, index: number) => Array(prize.amount).fill(prize.type === "cash" ? connector.formatCurrency(playerState.exchangedCashValues[index]) : prize.value));
+        const prizeValuesAtPositions = config.prizes.flatMap((prize: any, index: number) => Array(prize.amount).fill(prize.type === "cash" ? connector.formatCurrency(playerState.exchangedCashValues[index]) : getItemDisplayValue(prize, connector.settings.language)));
 
         const urls = campaignState.leaderboard.roundIds.map((roundId: string, index: number) => (campaignState.leaderboard.games[index] != null ? connector.getReplayUrl(roundId, campaignState.leaderboard.games[index]) : null));
 
@@ -340,7 +341,7 @@ export class TournamentUi implements IPromoToolUi {
                                                                     ) : (
                                                                         <>{i18next.t("tournamentRulesPositionsMessage", {from: startPlaces[index] + 1, to: startPlaces[index] + prize.amount}) + " "}</>
                                                                     )}
-                                                                    <b>{prize.type === "cash" ? connector.formatCurrency(playerState.exchangedCashValues[index]) : prize.value}</b>
+                                                                    <b>{prize.type === "cash" ? connector.formatCurrency(playerState.exchangedCashValues[index]) : getItemDisplayValue(prize, connector.settings.language)}</b>
                                                                 </li>
                                                             )
                                                         );

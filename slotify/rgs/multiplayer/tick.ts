@@ -10,7 +10,7 @@ import {init} from "./init";
 import {cancelCommand} from "./command";
 import {redisPubSub} from "@slotify/shared/lib/redis";
 import {gamesService} from "../util/gamesUtil";
-import {hasTask, registerSchedulerCallback, scheduleTask, setTaskTimestamp, unsheduleTask} from "@slotify/shared/lib/scheduler";
+import {getNextCronTimestamp, hasTask, registerSchedulerCallback, scheduleTask, setTaskTimestamp, unsheduleTask} from "@slotify/shared/lib/scheduler";
 import {Draw} from "../db/model/Draw";
 import {calculateFinalWin, winRatio} from "../util/roundUtil";
 import {ISettingsFilter, Settings} from "../db/model/Settings";
@@ -20,11 +20,17 @@ import {SystemCommand} from "../db/model/SystemCommand";
 import {lock} from "@slotify/shared/lib/lock";
 import Exception from "@slotify/shared/lib/Exception";
 
-registerSchedulerCallback("multiplayer", tick, {parallelTasksLimit: 1000});
-
 export async function initTicks() {
+    registerSchedulerCallback("multiplayer", tick, {parallelTasksLimit: 1000});
+    registerSchedulerCallback("rehydrateTicks", async () => {
+        logger.info("rehydrateTicks started");
+        await initTicksForRooms();
+        await scheduleTask("rehydrateTicks", "cron", getNextCronTimestamp("*/5 * * * *"), {});
+    });
+
     await redisPubSub.subscribe("roomAdded", async () => await initTicksForRooms());
     await initTicksForRooms();
+    await scheduleTask("rehydrateTicks", "cron", getNextCronTimestamp("*/5 * * * *"), {});
 }
 
 async function initTicksForRooms() {
@@ -58,7 +64,7 @@ async function tick({roomId}: any): Promise<number | void> {
     const drawId = draw.getNextDrawId();
 
     if (Math.abs(time - draw.nextTickTime) > 300) {
-        logger.warn(`Tick execution time was delayed by ${time - draw.nextTickTime}`, {
+        logger.warn(`Tick execution time was delayed by ${time - draw.nextTickTime}, game ${room.game} room ${room.name}`, {
             roomId,
             drawId,
             time,
@@ -84,7 +90,9 @@ async function tick({roomId}: any): Promise<number | void> {
 
     const rngState = room.provablyFair ? await getDrawRngState(room.roomId, drawId) : undefined;
 
+    const tickRequestStart = Date.now();
     const {state, cancels, nextTickTime, wins, broadcast, messages, drawFinished, rngPayload} = await tickRequest(room, time, draw.state, currentRoundCommands, currentRoundSystemCommands, drawId, rngState);
+    const tickRequestTime = Date.now() - tickRequestStart;
 
     if (draw.finished) {
         draw = Draw.create({roomId: room.roomId, drawId, tickId: 0});
@@ -132,7 +140,7 @@ async function tick({roomId}: any): Promise<number | void> {
 
     const finishedTime = Date.now();
     if (Math.abs(finishedTime - time) > 200) {
-        logger.warn(`Long tick execution time ${finishedTime - time}`, {
+        logger.warn(`Long tick execution time ${finishedTime - time}, game ${room.game} room ${room.name}`, {
             roomId,
             drawId,
             time,
@@ -141,6 +149,7 @@ async function tick({roomId}: any): Promise<number | void> {
             commandsCount: commands.length,
             commandsToCancelCount: commandsToCancel.length,
             winsCount: Object.entries(wins || {}).length,
+            tickRequestTime,
         });
     }
 }
@@ -156,6 +165,7 @@ async function tickRequest(
 ): Promise<{state?: any; cancels?: string[]; nextTickTime: number; wins?: {[key: string]: number}; broadcast: any; messages?: {[playerId: string]: any}; drawFinished?: boolean; rngPayload?: {newRngCursor: number}}> {
     const request = {
         time,
+        config: room.config,
         state,
         commands: commands.map(command => ({
             commandId: command.commandId,

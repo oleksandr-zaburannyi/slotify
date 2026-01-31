@@ -2,7 +2,7 @@ import Exception from "@slotify/shared/lib/Exception";
 import {Wallet} from "../db/model/Wallet";
 import IWalletAdapter from "./IWalletAdapter";
 import StandardWalletAdapter from "./StandardWalletAdapter";
-import {Express} from "express";
+import {Express, Response, Router} from "express";
 import SoftSwissWalletAdapter from "./SoftSwissWalletAdapter";
 import logger from "@slotify/shared/lib/logger";
 import OpenBoxWalletAdapter from "./OpenBoxWalletAdapter";
@@ -21,6 +21,7 @@ import BadHombreWalletAdapter from "./BadHombreWalletAdapter";
 import GrrrWalletAdapter from "./GrrrWalletAdapter";
 import {PinUpWalletAdapter} from "./PinUpWalletAdapter";
 import AleaWalletAdapter from "./AleaWalletAdapter";
+import {redisPubSub} from "@slotify/shared/lib/redis";
 
 export const errorCodes = {
     PLAYER_UNAUTHORIZED: "PLAYER_UNAUTHORIZED",
@@ -57,32 +58,167 @@ const walletAdapters: {[key: string]: {new (): IWalletAdapter}} = {
     "pinup": PinUpWalletAdapter,
     "alea": AleaWalletAdapter,
 };
-const walletInstances: {[key: string]: IWalletAdapter} = {};
-const walletsPerAdapter: Record<string, string[]> = {};
+
+interface WalletEntry {
+    adapter: IWalletAdapter;
+    router: Router;
+}
+
+let walletEntries: Map<string, WalletEntry> = new Map();
+let reloading = false;
+let reloadPending = false;
+let pendingRetries = 0;
+const MAX_PENDING_RETRIES = 3;
+
+interface CreateWalletResult {
+    entry: WalletEntry;
+    adapterName: string;
+}
+
+async function createWalletEntry(walletId: string): Promise<CreateWalletResult | null> {
+    const wallet = await Wallet.getById(walletId);
+    if (!wallet) {
+        logger.warn(`Cannot load wallet ${walletId}: not found`);
+        return null;
+    }
+    if (!wallet.enabled) {
+        logger.debug(`Skipping disabled wallet ${walletId}`);
+        return null;
+    }
+    if (!walletAdapters[wallet.adapter]) {
+        logger.warn(`Cannot load wallet ${walletId}: adapter '${wallet.adapter}' not found`);
+        return null;
+    }
+
+    const router = Router();
+    const adapter = new walletAdapters[wallet.adapter]();
+    await adapter.init(walletId, router, wallet.config, wallet.ips);
+
+    return {entry: {adapter, router}, adapterName: wallet.adapter};
+}
+
+async function loadWallet(walletId: string): Promise<void> {
+    const result = await createWalletEntry(walletId);
+    if (result) {
+        walletEntries.set(walletId, result.entry);
+        logger.info(`Loaded wallet: ${walletId} (adapter: ${result.adapterName})`);
+    }
+}
+
+async function reloadAll(isPendingRetry = false): Promise<void> {
+    if (reloading) {
+        reloadPending = true;
+        logger.debug("Wallet reload already in progress, will reload again after completion");
+        return;
+    }
+    reloading = true;
+    if (!isPendingRetry) {
+        pendingRetries = 0;
+    }
+
+    try {
+        const currentWallets = await Wallet.find();
+        const newEntries = new Map<string, WalletEntry>();
+        const previousCount = walletEntries.size;
+
+        // Build new map completely before swapping
+        for (const wallet of currentWallets) {
+            try {
+                const result = await createWalletEntry(wallet.id);
+                if (result) {
+                    newEntries.set(wallet.id, result.entry);
+                }
+            } catch (e) {
+                logger.error(`Failed to load wallet ${wallet.id} (adapter: ${wallet.adapter})`, {error: e});
+            }
+        }
+
+        // Atomic swap - assign new map reference
+        walletEntries = newEntries;
+
+        logger.info(`Reloaded wallets: ${newEntries.size} loaded, ${previousCount} previous`);
+    } finally {
+        reloading = false;
+        if (reloadPending) {
+            reloadPending = false;
+            if (pendingRetries < MAX_PENDING_RETRIES) {
+                pendingRetries++;
+                reloadAll(true).catch(e => logger.error("Error in pending wallet reload", {error: e}));
+            } else {
+                logger.warn("Max pending wallet reload retries reached, skipping");
+            }
+        }
+    }
+}
 
 export async function getWalletAdapter(walletId: string): Promise<IWalletAdapter> {
-    if (!(await Wallet.getWallets()).find(wallet => wallet.id === walletId)?.enabled) throw new Exception(`Wallet '${walletId}' is not enabled`);
-    if (!walletInstances[walletId]) throw new Exception(`Couldn't find wallet adapter '${walletId}'`);
+    const wallet = await Wallet.getById(walletId);
+    if (!wallet?.enabled) throw new Exception(`Wallet '${walletId}' is not enabled`);
 
-    walletInstances[walletId].config.hostname = (await Wallet.getById(walletId)).config.hostname; //refresh wallet config hostname
+    const entry = walletEntries.get(walletId);
+    if (!entry) throw new Exception(`Couldn't find wallet adapter '${walletId}'`);
 
-    return walletInstances[walletId];
+    return entry.adapter;
+}
+
+async function handleUnknownWallet(walletId: string, res: Response): Promise<void> {
+    try {
+        try {
+            const wallet = await Wallet.getById(walletId);
+            if (!wallet.enabled) {
+                res.status(404).json({error: {code: "WALLET_DISABLED", message: `Wallet '${walletId}' is disabled`}});
+                return;
+            }
+            res.status(404).json({error: {code: "WALLET_NOT_CONFIGURED", message: `Wallet '${walletId}' not configured`}});
+        } catch {
+            res.status(404).json({error: {code: "WALLET_NOT_FOUND", message: `Wallet '${walletId}' not found`}});
+        }
+    } catch (e) {
+        logger.error(`Failed to check wallet status`, {error: e, walletId});
+        if (!res.headersSent) {
+            res.status(500).json({error: {code: "INTERNAL_ERROR", message: "Internal server error"}});
+        }
+    }
 }
 
 export async function initWalletApi(api: Express): Promise<void> {
-    const wallets = await Wallet.getWallets();
+    const mainRouter = Router();
 
-    for (const {id, adapter, config, ips} of wallets) {
-        if (!walletAdapters[adapter]) {
-            logger.warn(`Couldn't find wallet adapter ${adapter}`);
-            continue;
+    // Dynamic dispatch middleware - check memory first to reduce latency
+    mainRouter.use("/:walletId", (req, res, next) => {
+        const {walletId} = req.params;
+
+        // First check memory map for fast path
+        const entry = walletEntries.get(walletId);
+        if (entry) {
+            return entry.router(req, res, next);
         }
 
-        const walletAdapter = new walletAdapters[adapter]();
+        // Not in map - check if it exists in DB but not loaded yet
+        handleUnknownWallet(walletId, res);
+    });
 
-        await walletAdapter.init(id, api, `/wallet/${id}`, config, ips);
-        walletInstances[id] = walletAdapter;
-        walletsPerAdapter[adapter] ||= [];
-        walletsPerAdapter[adapter].push(id);
+    api.use("/wallet", mainRouter);
+
+    // Initial load of all wallets
+    const wallets = await Wallet.getWallets();
+    for (const wallet of wallets) {
+        try {
+            await loadWallet(wallet.id);
+        } catch (e) {
+            logger.error(`Failed to load wallet ${wallet.id} during startup`, {error: e});
+        }
+    }
+
+    // Subscribe to invalidation events for hot-reload
+    try {
+        await redisPubSub.subscribe("invalidate/wallets", () => {
+            logger.info("Wallet invalidation received, reloading wallets");
+            reloadAll().catch(e => logger.error("Error reloading wallets", {error: e}));
+        });
+        logger.info("Subscribed to wallet invalidation events");
+    } catch (e) {
+        logger.error("Failed to subscribe to wallet invalidation events, service cannot start", {error: e});
+        throw e;
     }
 }

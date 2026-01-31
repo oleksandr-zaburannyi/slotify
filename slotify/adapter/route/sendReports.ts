@@ -15,14 +15,9 @@ const reports = [
             query ($timestamp: JSON, $wallet: String) {
                 DGE_gameSummary(options: {wallet: $wallet, timestamp: $timestamp}) {
                     items {
-                        from
-                        to
+                        date
                         game
-                        wallet
-                        operator
                         brand
-                        bets
-                        wins
                         totalBet
                         totalWin
                         gameWin
@@ -30,18 +25,12 @@ const reports = [
                 }
                 DGE_pendingRounds(options: {wallet: $wallet, timestamp: $timestamp}) {
                     items {
-                        createdAt
+                        date
                         game
-                        variant
+                        brand
                         roundId
                         playerId
                         status
-
-                        wallet
-                        operator
-                        brand
-                        currency
-
                         bet
                         win
                     }
@@ -49,18 +38,12 @@ const reports = [
 
                 DGE_cancelledRounds(options: {wallet: $wallet, timestamp: $timestamp}) {
                     items {
-                        createdAt
+                        date
                         game
-                        variant
                         roundId
                         playerId
                         failReason
-
-                        wallet
-                        operator
                         brand
-                        currency
-
                         bet
                         win
                     }

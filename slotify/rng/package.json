@@ -1,6 +1,6 @@
 {
     "name": "@slotify/rng",
-    "version": "4.0.6",
+    "version": "4.1.0",
     "author": "",
     "license": "UNLICENSED",
     "main": "lib/index.js",
@@ -38,7 +38,7 @@
         "@graphql-tools/graphql-file-loader": "^8.0.22",
         "@graphql-tools/load": "^8.1.2",
         "@graphql-tools/schema": "^10.0.25",
-        "@slotify/shared": "^2.1.11",
+        "@slotify/shared": "^2.2.0",
         "@types/express": "^5.0.3",
         "@types/node": "^24.1.0",
         "@types/uuid": "^10.0.0",

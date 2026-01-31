@@ -21,6 +21,8 @@ import {SystemCommand} from "../db/model/SystemCommand";
 export async function command(provider: string, game: string, roomId: string, player: IPlayer, action: string, bet?: number, params?: any) {
     logger.info(`Multiplayer command request from player ${player.playerId}`, {playerId: player.playerId, game, roomId, action, bet, params});
 
+    const room = await Room.findOneByOrFail({roomId});
+
     const {operator, brand, currency, playerId, wallet, jurisdiction, sessionId, nickname} = player;
     const settingsFilter = {game, brand, jurisdiction, wallet, provider, operator, currency};
     const sessionData = await getSessionData(sessionId);
@@ -28,16 +30,16 @@ export async function command(provider: string, game: string, roomId: string, pl
     const hasBet = bet !== undefined;
     if (hasBet) {
         const {decimals} = await Currency.getFixedRate(currency, settingsFilter);
-        const bets = await getBets(provider, game, undefined, currency, wallet, operator, brand, jurisdiction, sessionData, roomId);
+        const bets = await getBets(provider, game, undefined, currency, wallet, operator, brand, jurisdiction, sessionData, room);
         validateInitialPlay(bet, decimals, bets, action);
     }
-    const betLimits = await getBetLimits(player.currency, settingsFilter, sessionData);
+    const betLimits = await getBetLimits(player.currency, settingsFilter, sessionData, room);
 
     const draw = await Draw.findOneOrFail({where: {roomId}, order: {id: "DESC"}});
 
     const time = Date.now();
 
-    const {valid, instantTick, message, roundId} = await commandRequest(provider, game, playerId, betLimits, time, draw.state, action, bet, currency, params);
+    const {valid, instantTick, message, roundId} = await commandRequest(provider, game, playerId, betLimits, time, room.config, draw.state, action, bet, currency, params);
 
     const drawId = draw.getNextDrawId();
 
@@ -170,6 +172,7 @@ export async function commandRequest(
     playerId: string,
     betLimits: IBetLimits,
     time: number,
+    config: any,
     state?: any,
     action?: string,
     bet?: number,
@@ -177,7 +180,7 @@ export async function commandRequest(
     params?: any,
     data?: any,
 ): Promise<{valid: boolean; instantTick: boolean; message: any; roundId?: string}> {
-    const request = {playerId, time, action, bet, currency, params, state, betLimits, data};
+    const request = {playerId, time, action, bet, currency, params, config, state, betLimits, data};
     return await fetchAndParse(`${await gamesService(provider, game)}/api/multiplayer/${game}/command`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(request)});
 }
 

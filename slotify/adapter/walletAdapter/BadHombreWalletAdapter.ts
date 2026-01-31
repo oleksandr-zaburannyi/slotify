@@ -1,4 +1,4 @@
-import {Express, NextFunction, Request, Response} from "express";
+import {Router, NextFunction, Request, Response} from "express";
 import * as crypto from "crypto";
 import Exception from "@slotify/shared/lib/Exception";
 import fetch from "@slotify/shared/lib/fetch";
@@ -205,13 +205,13 @@ export class BadHombreWalletAdapter implements IWalletAdapter {
         return campaignName.substring(campaignName.lastIndexOf("_") + 1);
     }
 
-    async init(wallet: string, api: Express, path: string, config: IConfig, whitelistedIps?: string[]) {
+    async init(wallet: string, router: Router, config: IConfig, whitelistedIps?: string[]) {
         this.wallet = wallet;
         this.config = config;
         if (!this.config.privateKey) throw new Exception("Private key is required");
         this.cipher = new Cipher(this.config.privateKey, this.wallet);
 
-        api.post(path + "/api/game/launch", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, ILaunchBody>, res: Response) => {
+        router.post("/api/game/launch", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, ILaunchBody>, res: Response) => {
             try {
                 const mode = req.body.isDemo ? "fun" : "real";
                 const brand = req.body.brand;
@@ -231,7 +231,7 @@ export class BadHombreWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/api/game/history", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, IHistoryBody>, res) => {
+        router.post("/api/game/history", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, IHistoryBody>, res) => {
             const operator = "badhombre";
             const roundId = req.body.round;
             const game = req.body.game;
@@ -244,7 +244,7 @@ export class BadHombreWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/api/game/list", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, IGameListBody>, res: Response) => {
+        router.post("/api/game/list", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, IGameListBody>, res: Response) => {
             try {
                 const categories = {
                     "live": "OTHERS_LIVE",
@@ -285,7 +285,7 @@ export class BadHombreWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/api/game/stakeValues", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, IStakeValuesBody>, res: Response) => {
+        router.post("/api/game/stakeValues", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, IStakeValuesBody>, res: Response) => {
             try {
                 const {brand, game, currencies} = req.body;
                 const body: {currency: string; values: number[]}[] = [];
@@ -303,7 +303,7 @@ export class BadHombreWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/api/game/bonus/give", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, IGiveBonusBody>, res: Response) => {
+        router.post("/api/game/bonus/give", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, IGiveBonusBody>, res: Response) => {
             try {
                 const {brand, game, account, bonus, type, stakeValue, startDate, endDate, count, currency} = req.body;
                 if (type !== "FREE_SPINS") throw new Exception("Bonus type not supported");
@@ -326,7 +326,7 @@ export class BadHombreWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/api/game/bonus/cancel", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, IBonusCancelBody>, res) => {
+        router.post("/api/game/bonus/cancel", ipFilter(whitelistedIps), this.validateServer.bind(this), async (req: Request<unknown, unknown, IBonusCancelBody>, res) => {
             try {
                 const campaign = await getCampaignByName(this.getCampaignName(req.body.bonus));
                 if (!campaign) throw new Exception("Campaign not found", {data: {...req.body}});
@@ -438,7 +438,7 @@ export class BadHombreWalletAdapter implements IWalletAdapter {
             const {totalBalance} = await this.fetch<ICashDrop, IBalanceResponse>("/api/game/bonus/cashdrop", params, player.brand!);
             return {balance: totalBalance};
         } else if (transaction.campaignType === "freeBets") {
-            if (transaction.campaignData!.used === transaction.campaignData?.total) {
+            if (transaction.type === "deposit" && transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) throw new Exception("Couldn't find campaign name");
                 const bonus = this.getBonus(campaign.name);

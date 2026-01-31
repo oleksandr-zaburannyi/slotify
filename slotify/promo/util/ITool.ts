@@ -92,6 +92,16 @@ export interface ITool<ICampaignConfig = any, IPlayerState = any, ICampaignState
         streamSynchronizedAccumulator: IStreamSynchronizedAccumulator<ICampaignConfig, TEntryData, TAccumulationData>;
     }): Promise<{playerState?: IPlayerState; campaignState?: ICampaignState; prizes?: IPrize[]; finished?: boolean; data?: any; logs?: ILog<ILogData>[]} | void>;
 
+    withdrawFailed?(request: {
+        config: ICampaignConfig;
+        player: IPlayer;
+        loadPlayerState: (readOnly?: boolean) => Promise<IPlayerState>;
+        loadCampaignState: (readOnly?: boolean) => Promise<ICampaignState>;
+        transaction: ITransactionRequest;
+        streamEntry: (data: TEntryData) => Promise<IStreamEntry<TEntryData>>;
+        streamSynchronizedAccumulator: IStreamSynchronizedAccumulator<ICampaignConfig, TEntryData, TAccumulationData>;
+    }): Promise<{playerState?: IPlayerState; campaignState?: ICampaignState; logs?: ILog<ILogData>[]} | void>;
+
     cancel?(request: {
         config: ICampaignConfig;
         player: IPlayer;

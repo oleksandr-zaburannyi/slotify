@@ -81,8 +81,23 @@ locals {
         GAMES_SERVICES = join(",", keys(lookup(var.versions, "game-servers", lookup(var.versions, "games", {}))))
         RGS = var.rgs-name
         SUPPORT_EMAIL = var.support-email
+        RGS_MODE = "api"
       }, lookup(var.env-vars, "rgs", {}))
     }, lookup(var.service-overrides, "rgs", {})),
+    "rgs-multiplayer" : merge({
+      enabled = lookup(var.versions, "rgs", false)
+      image = "${var.container-registry}/${var.container-registry-repository}/rgs:${lookup(var.versions, "rgs", "")}"
+      requests = { cpu = "500m", memory = "512Mi" }
+      limits = { memory = "1024Mi" }
+      metrics_enabled = true
+      env-vars = merge({
+        ADAPTER_RGS_KEY = random_password.rgs_key.result
+        GAMES_SERVICES = join(",", keys(lookup(var.versions, "game-servers", lookup(var.versions, "games", {}))))
+        RGS = var.rgs-name
+        SUPPORT_EMAIL = var.support-email
+        RGS_MODE = "multiplayer"
+      }, lookup(var.env-vars, "rgs-multiplayer", {}))
+    }, lookup(var.service-overrides, "rgs-multiplayer", {})),
     "websocket" : merge({
       enabled = lookup(var.versions, "websocket", false)
       image = "${var.container-registry}/${var.container-registry-repository}/websocket:${lookup(var.versions, "websocket", "")}"
@@ -121,6 +136,7 @@ locals {
   paths = merge({
     "/*" = "rgs"
     "/game/*" = "rgs"
+    "/room/*" = "rgs"
     "/authenticate" = "rgs"
     "/balance" = "rgs"
     "/games" = "rgs"
@@ -164,6 +180,8 @@ resource "kubernetes_namespace" "app-namespace" {
   metadata {
     name = var.namespace
   }
+
+  depends_on = [terraform_data.cluster_ready]
 }
 
 resource "kubernetes_config_map" "config" {
@@ -195,6 +213,8 @@ resource "kubernetes_config_map" "config" {
     CORS_ORIGIN = var.cors-origin == null ? "https://cdn-${var.env}.${local.domains[0]}" : var.cors-origin
     ALLOW_HTTP = var.allow-http
   }
+
+  depends_on = [terraform_data.cluster_ready]
 }
 
 resource "kubernetes_secret" "secret" {
@@ -211,6 +231,8 @@ resource "kubernetes_secret" "secret" {
     REDIS_PORT = google_redis_instance.redis[0].port
     REDIS_DATABASE = var.redis-database
   }
+
+  depends_on = [terraform_data.cluster_ready]
 }
 
 resource "kubernetes_secret" "mail-secret" {
@@ -223,6 +245,8 @@ resource "kubernetes_secret" "mail-secret" {
     MAIL_USER = var.mail_user
     MAIL_PASSWORD = var.mail_password
   }
+
+  depends_on = [terraform_data.cluster_ready]
 }
 
 resource "kubernetes_secret" "secret-registry" {
@@ -234,6 +258,8 @@ resource "kubernetes_secret" "secret-registry" {
   data = {
     ".dockerconfigjson" = format("{\"auths\":{\"${var.container-registry}\":{\"username\":\"${var.container-registry-user}\",\"password\":\"%s\",\"auth\":\"%s\"}}}", var.container-registry-password, base64encode("${var.container-registry-user}:${var.container-registry-password}"))
   }
+
+  depends_on = [terraform_data.cluster_ready]
 }
 
 
@@ -248,7 +274,13 @@ resource "kubernetes_deployment" "deployment" {
       spec[0].template[0].metadata[0].annotations["kubectl.kubernetes.io/restartedAt"]
     ]
   }
-  depends_on = [kubernetes_secret.secret, kubernetes_secret.mail-secret]
+  depends_on = [
+    terraform_data.cluster_ready,
+    kubernetes_secret.secret,
+    kubernetes_secret.mail-secret,
+    google_sql_database_instance.instance,
+    google_sql_database_instance.instance_replica
+  ]
   metadata {
     name = each.key
     namespace = kubernetes_namespace.app-namespace.metadata[0].name
@@ -361,6 +393,8 @@ resource "kubernetes_service" "service" {
       target_port = "8080"
     }
   }
+
+  depends_on = [terraform_data.cluster_ready]
 }
 
 resource "kubernetes_horizontal_pod_autoscaler_v2" "hpa" {
@@ -388,6 +422,8 @@ resource "kubernetes_horizontal_pod_autoscaler_v2" "hpa" {
       }
     }
   }
+
+  depends_on = [terraform_data.cluster_ready]
 }
 
 resource "kubernetes_manifest" "backend-config" {
@@ -415,6 +451,8 @@ resource "kubernetes_manifest" "backend-config" {
       timeoutSec = lookup(each.value, "timeout", 45)
     }
   }
+
+  depends_on = [terraform_data.cluster_ready]
 }
 
 resource "kubernetes_ingress_v1" "ingress" {
@@ -450,6 +488,8 @@ resource "kubernetes_ingress_v1" "ingress" {
       }
     }
   }
+
+  depends_on = [terraform_data.cluster_ready]
 }
 
 resource "null_resource" "copy_connector" {

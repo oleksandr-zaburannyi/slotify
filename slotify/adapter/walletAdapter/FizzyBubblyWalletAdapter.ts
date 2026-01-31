@@ -1,7 +1,7 @@
 /**
  * FizzyBubbly wallet adapter
  */
-import {Express, NextFunction, Request, Response} from "express";
+import {Router, NextFunction, Request, Response} from "express";
 import {check} from "express-validator";
 import {gql} from "graphql-request";
 import * as crypto from "crypto";
@@ -64,14 +64,14 @@ export class FizzyBubblyWalletAdapter implements IWalletAdapter {
         };
     }
 
-    async init(wallet: string, api: Express, path: string, config: IConfig) {
+    async init(wallet: string, router: Router, config: IConfig) {
         this.wallet = wallet;
         this.config = config;
         this.cipher = new Cipher(this.config.secretKey, this.wallet);
 
         // wallet/fizzybubbly/game/url
-        api.post(
-            path + "/game/url",
+        router.post(
+            "/game/url",
             this.validateServer.bind(this),
             validate([
                 check("mode").isIn(["demo", "wallet"]),
@@ -130,8 +130,8 @@ export class FizzyBubblyWalletAdapter implements IWalletAdapter {
         );
 
         // wallet/fizzybubbly/game/replay
-        api.post(
-            path + "/game/replay",
+        router.post(
+            "/game/replay",
             this.validateServer.bind(this),
             validate([check("brandId").exists().notEmpty().isString().isLength({max: 255}), check("gameRoundId").isString().exists().isLength({max: 255}), check("gameId").exists().notEmpty().isString().isLength({max: 255})]),
             async (req, res) => {
@@ -153,8 +153,8 @@ export class FizzyBubblyWalletAdapter implements IWalletAdapter {
         );
 
         // wallet/fizzybubbly/free-spins-campaign/bet-values
-        api.post(
-            path + "/free-spins-campaign/bet-values",
+        router.post(
+            "/free-spins-campaign/bet-values",
             this.validateServer.bind(this),
             validate([
                 check("brandId").exists().notEmpty().isString().isLength({max: 255}),
@@ -181,8 +181,8 @@ export class FizzyBubblyWalletAdapter implements IWalletAdapter {
         );
 
         // wallet/fizzybubbly/free-spins-campaign/create
-        api.post(
-            path + "/free-spins-campaign/create",
+        router.post(
+            "/free-spins-campaign/create",
             this.validateServer.bind(this),
             validate([
                 check("betCount").exists().notEmpty().isInt(),
@@ -269,8 +269,8 @@ export class FizzyBubblyWalletAdapter implements IWalletAdapter {
         );
 
         // wallet/fizzybubbly/free-spins-campaign/cancel
-        api.post(
-            path + "/free-spins-campaign/cancel",
+        router.post(
+            "/free-spins-campaign/cancel",
             this.validateServer.bind(this),
             validate([check("providerCampaignId").exists().notEmpty().isString().isLength({max: 1024}), check("campaignId").exists().notEmpty().isString().isLength({max: 1024})]),
             async (req, res) => {

@@ -1,5 +1,5 @@
 import IWalletAdapter, {ISession, IWalletAuthenticate, IWalletBalance, IWalletTransaction} from "./IWalletAdapter";
-import {Express, NextFunction, Request, RequestHandler, Response} from "express";
+import {Router, NextFunction, Request, RequestHandler, Response} from "express";
 import Exception from "@slotify/shared/lib/Exception";
 import logger from "@slotify/shared/lib/logger";
 import fetch from "@slotify/shared/lib/fetch";
@@ -59,12 +59,12 @@ export class PinUpWalletAdapter implements IWalletAdapter {
     config!: IConfig;
     cipher!: Cipher;
 
-    async init(wallet: string, api: Express, path: string, config: IConfig, whitelistedIps?: string[]) {
+    async init(wallet: string, router: Router, config: IConfig, whitelistedIps?: string[]) {
         this.wallet = wallet;
         this.config = config;
         this.cipher = new Cipher(this.config.providerToken, this.wallet);
 
-        api.post(path + "/partner/:partner/gameWebFrame", ipFilter(whitelistedIps), auth(this.config.secretKey), async (req: Request<IRequestParams, unknown, ILauncherBodyParams, unknown>, res: any) => {
+        router.post("/partner/:partner/gameWebFrame", ipFilter(whitelistedIps), auth(this.config.secretKey), async (req: Request<IRequestParams, unknown, ILauncherBodyParams, unknown>, res: any) => {
             const demo = req.body.demo;
             const channel = req.body.isMobile ? "mobile" : "desktop";
             const game = req.body.gameId;
@@ -100,12 +100,12 @@ export class PinUpWalletAdapter implements IWalletAdapter {
             res.json({URL: launchUrl});
         });
 
-        api.get(path + "/partner/:partner/games", ipFilter(whitelistedIps), auth(this.config.secretKey), async (req: Request<IRequestParams, unknown, unknown, unknown>, res: any) => {
+        router.get("/partner/:partner/games", ipFilter(whitelistedIps), auth(this.config.secretKey), async (req: Request<IRequestParams, unknown, unknown, unknown>, res: any) => {
             const games = await this.getAllGames();
             res.json({provider: this.config.providerId, gameList: games});
         });
 
-        api.post(path + "/partner/:partner/freespin", ipFilter(whitelistedIps), auth(this.config.secretKey), async (req: Request<IRequestParams, unknown, ICreateFreeSpinsBodyParams, unknown>, res: any) => {
+        router.post("/partner/:partner/freespin", ipFilter(whitelistedIps), auth(this.config.secretKey), async (req: Request<IRequestParams, unknown, ICreateFreeSpinsBodyParams, unknown>, res: any) => {
             try {
                 const id = await this.createFreeBets(req.body);
                 res.send({id});
@@ -120,7 +120,7 @@ export class PinUpWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.put(path + "/partner/:partner/freespin/cancel", ipFilter(whitelistedIps), auth(this.config.secretKey), async (req: Request<IRequestParams, unknown, ICancelFreeSpinsBodyParams, unknown>, res: any) => {
+        router.put("/partner/:partner/freespin/cancel", ipFilter(whitelistedIps), auth(this.config.secretKey), async (req: Request<IRequestParams, unknown, ICancelFreeSpinsBodyParams, unknown>, res: any) => {
             try {
                 await this.closeFreeBetsCampaign(req.body);
             } catch (e: any) {
@@ -154,7 +154,7 @@ export class PinUpWalletAdapter implements IWalletAdapter {
 
     async transaction(player: Player, transaction: IWalletTransaction, session: ISession): Promise<IWalletBalance> {
         if (transaction.campaignType === "freeBets") {
-            if (transaction.campaignData!.used === transaction.campaignData?.total) {
+            if (transaction.type === "deposit" && transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) {
                     throw new Exception("Couldn't find campaign name");

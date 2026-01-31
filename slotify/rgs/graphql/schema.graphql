@@ -184,6 +184,9 @@ type Rounds {
 type Round {
     roundId: String
     createdAt: Float #timestamp
+    failedAt: Float #timestamp
+    completedAt: Float #timestamp
+    failReason: String
     playerId: String
     status: String
     game: String
@@ -196,18 +199,12 @@ type DGEPendingRounds {
 }
 
 type DGEPendingRound {
+    date: String
     roundId: String
-    createdAt: String
     playerId: String
     status: String
     game: String
-    variant: String
-
-    wallet: String
-    operator: String
     brand: String
-    currency: String
-
     win: Float
     bet: Float
 }
@@ -218,18 +215,12 @@ type DGECancelledRounds {
 }
 
 type DGECancelledRound {
+    date: String
     roundId: String
-    createdAt: String
     playerId: String
     game: String
     failReason: String
-    variant: String
-
-    wallet: String
-    operator: String
     brand: String
-    currency: String
-
     win: Float
     bet: Float
 }

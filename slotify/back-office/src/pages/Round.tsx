@@ -57,6 +57,9 @@ const Rounds = () => {
                 items {
                     roundId
                     createdAt
+                    failedAt
+                    failReason
+                    completedAt
                     playerId
                     status
                     game
@@ -134,10 +137,10 @@ const Rounds = () => {
         }
     `;
     const drawIdData = useSWR(state.services.includes("rgs") && state.account.permissions?.includes("gameplay") && [queryDrawId, variablesRound], fetcher, {revalidateOnFocus: false, shouldRetryOnError: false});
-    const variablesDraw = {drawId: drawIdData?.data?.commands?.items?.length > 0 ? drawIdData.data.commands.items[0].drawId : null};
+    const variablesDraw = {drawId: drawIdData?.data?.commands?.items?.length > 0 ? drawIdData.data.commands.items[0].drawId : null, playerId: summary?.playerId};
 
     const queryDraw = gql`
-        query ($drawId: JSON!) {
+        query ($drawId: JSON!, $playerId: JSON!) {
             draws(filter: [{field: "drawId", type: EQUAL, value: $drawId}], sort: {field: "createdAt", order: ASC}, limit: 100000) {
                 items {
                     id
@@ -149,7 +152,7 @@ const Rounds = () => {
                     state
                 }
             }
-            commands(filter: [{field: "drawId", type: EQUAL, value: $drawId}], sort: {field: "createdAt", order: ASC}, limit: 100000) {
+            commands(filter: [{field: "drawId", type: EQUAL, value: $drawId}, {field: "playerId", type: EQUAL, value: $playerId}], sort: {field: "createdAt", order: ASC}, limit: 100000) {
                 items {
                     commandId
                     playerId
@@ -162,7 +165,7 @@ const Rounds = () => {
                     withdrawalStatus
                 }
             }
-            drawWins(filter: [{field: "drawId", type: EQUAL, value: $drawId}], sort: {field: "createdAt", order: ASC}, limit: 100000) {
+            drawWins(filter: [{field: "drawId", type: EQUAL, value: $drawId}, {field: "playerId", type: EQUAL, value: $playerId}], sort: {field: "createdAt", order: ASC}, limit: 100000) {
                 items {
                     playerId
                     tickId
@@ -176,7 +179,7 @@ const Rounds = () => {
         }
     `;
 
-    const drawsData = useSWR(state.services.includes("rgs") && state.account.permissions?.includes("gameplay") && variablesDraw.drawId ? [queryDraw, variablesDraw] : null, fetcher, {revalidateOnFocus: false, shouldRetryOnError: false});
+    const drawsData = useSWR(state.services.includes("rgs") && state.account.permissions?.includes("gameplay") && variablesDraw.drawId && variablesDraw.playerId ? [queryDraw, variablesDraw] : null, fetcher, {revalidateOnFocus: false, shouldRetryOnError: false});
 
     const queryProvablyFair = gql`
         query ($roundId: JSON!) {
@@ -389,7 +392,7 @@ const Rounds = () => {
 
     const summaryData = [
         {label: "Round Id", value: summary?.roundId},
-        {label: "Player Id", value: summary?.playerId},
+        {label: "Player Id", value: summary?.playerId && <Link to={`/players/${summary.playerId}`}>{summary.playerId}</Link>},
         {label: "Native Id", value: summary?.nativeId},
         {label: "RGS", value: summary?.rgs},
         {label: "RGS Round Id", value: summary?.rgsRoundId},
@@ -413,7 +416,9 @@ const Rounds = () => {
     ];
 
     const roundSummaryData = [
-        {label: "CreatedAt", value: new Date(parseInt(round?.createdAt)).toLocaleString()},
+        {label: "Created at", value: new Date(parseInt(round?.createdAt)).toLocaleString()},
+        {label: "Failed at", value: round?.failedAt ? new Date(parseInt(round.failedAt)).toLocaleString() : ""},
+        {label: "Completed at", value: round?.completedAt ? new Date(parseInt(round?.completedAt)).toLocaleString() : ""},
         {
             label: "Status",
             value: (

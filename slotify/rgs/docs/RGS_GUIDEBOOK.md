@@ -1,19 +1,5 @@
 # Guidebook
 
-Features:
-
-- Compatible with any single player casino game genre and mechanics
-- Multiplayer game support can be added on request
-- Recovering and auto completing unfinished rounds
-- Support for persistent game state and multistep games
-- Multi currency bet and max exposure limit configurations
-- Variable RTP
-- Technology-agnostic towards Game Server
-- It can connect to Game Servers written in any programming language
-- Easy to integrate existing games catalogue
-- Compliant with regulatory requirements through critical files verification system and RTP monitoring
-- Game feed feature that allows for lightweight storage e.g. roulette's hot numbers
-
 ## Round
 
 The round represent full game cycle and contains of one or many wagers.
