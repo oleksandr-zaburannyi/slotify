@@ -1,4 +1,4 @@
-import {Express} from "express";
+import {Router} from "express";
 import {Player} from "../db/model/Player";
 import {ISessionData} from "../db/model/Session";
 import {IExceptionPopup, IExceptionPopupButton} from "@slotify/shared/lib/Exception";
@@ -70,7 +70,7 @@ export default interface IWalletAdapter {
     wallet: string;
     config: any;
 
-    init(wallet: string, api: Express, path: string, config: any, whitelistedIps?: string[]): Promise<void>;
+    init(wallet: string, router: Router, config: any, whitelistedIps?: string[]): Promise<void>;
 
     authenticate(key: string, operator: string, provider: string, game: string, ip?: string, channel?: "desktop" | "mobile"): Promise<IWalletAuthenticate>;
 

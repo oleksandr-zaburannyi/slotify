@@ -23,7 +23,7 @@ const Transactions = () => {
         {title: "Round Id", dataIndex: "roundId", render: (roundId: string) => <Link to={`/rounds/${roundId}`}>{roundId}</Link>, sorter: true, ...tableFilter("EQUAL")},
         {title: "Transaction Id", dataIndex: "transactionId", sorter: true, ...tableFilter("EQUAL")},
         {title: "Session Id", dataIndex: "sessionId", sorter: true, ...tableFilter("EQUAL")},
-        {title: "Player Id", dataIndex: "playerId", sorter: true, ...tableFilter("EQUAL")},
+        {title: "Player Id", dataIndex: "playerId", render: (playerId: string) => <Link to={`/players/${playerId}`}>{playerId}</Link>, sorter: true, ...tableFilter("EQUAL")},
         {title: "Native Id", dataIndex: "nativeId", sorter: true, ...tableFilter("STARTS_WITH")},
         {
             title: "Type",

@@ -1,5 +1,6 @@
 import {Button, DatePicker, Form, message, Select, Space, Switch, Tooltip} from "antd";
 import React, {useRef} from "react";
+import {Link} from "react-router-dom";
 import {InfoCircleOutlined, PlayCircleOutlined, RedoOutlined} from "@ant-design/icons";
 import {DataTable, tableFilter} from "../components/DataTable";
 import {ExportButton} from "../components/Buttons";
@@ -8,13 +9,16 @@ import {useAppState} from "../lib/AppProvider";
 import useStateParams from "../lib/useStateParams";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
+import timezone from "dayjs/plugin/timezone";
 import {AppModal} from "../App";
 import {getForm} from "../utils/getForm";
 import {gql} from "graphql-request";
 import useGraphQlFetcher from "../lib/useGraphQlFetcher";
 import Currency from "../components/Currency";
+import {timezones} from "../constants/timezones";
 
 dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const intervals: any[] = [
     // {title: "Hour", group: true, dataIndex: "hour", sorter: true, ...tableFilter("LIKE"), picker: "date"},
@@ -77,7 +81,7 @@ const RegenerateButton = () => {
 
 const GameWin = () => {
     const [state] = useAppState();
-    const initialValues = {dimensions: ["wallet", "excluded", "category"], time: [dayjs().utc().format("YYYY-MM-DD"), dayjs().utc().format("YYYY-MM-DD")], interval: "day", convert: true};
+    const initialValues = {dimensions: ["wallet", "excluded", "category"], time: [dayjs().utc().format("YYYY-MM-DD"), dayjs().utc().format("YYYY-MM-DD")], interval: "day", convert: true, timezone: "UTC"};
     const dataTable = useRef(null);
     const [params, setParams] = useStateParams<typeof initialValues>(
         initialValues,
@@ -85,6 +89,7 @@ const GameWin = () => {
         state => JSON.stringify(state),
         state => JSON.parse(state),
     );
+    const safeTimezone = params.timezone && timezones.some(tz => tz.value === params.timezone) ? params.timezone : initialValues.timezone;
 
     const columns: any[] = [
         {title: "Wallet", group: true, dataIndex: "wallet", sorter: true, ...tableFilter("LIKE"), ellipsis: {}},
@@ -110,7 +115,7 @@ const GameWin = () => {
         {title: "Game", group: true, dataIndex: "game", sorter: true, ...tableFilter("LIKE")},
         {title: "Game title", group: true, dataIndex: "gameTitle", sorter: true, ...tableFilter("LIKE")},
         {title: "Variant", group: true, dataIndex: "variant", sorter: true, ...tableFilter("LIKE")},
-        {title: "Player Id", group: true, dataIndex: "playerId", sorter: true, ...tableFilter("EQUAL")},
+        {title: "Player Id", group: true, dataIndex: "playerId", render: (playerId: string) => playerId && <Link to={`/players/${playerId}`}>{playerId}</Link>, sorter: true, ...tableFilter("EQUAL")},
         {title: "Native Id", group: true, dataIndex: "nativeId", sorter: true, ...tableFilter("EQUAL")},
         {title: "Category", group: true, dataIndex: "category", sorter: true, ...tableFilter("LIKE")},
         {title: "Country", group: true, dataIndex: "country", sorter: true, ...tableFilter("LIKE")},
@@ -190,28 +195,25 @@ const GameWin = () => {
                         ))}
                     </Select>
                 </Form.Item>
-                <Form.Item
-                    labelCol={{style: {flex: "0 0 80px"}}}
-                    style={{marginBottom: 10}}
-                    label={
-                        <>
-                            Time&nbsp;
-                            <Tooltip title={"UTC time"}>
-                                <InfoCircleOutlined />
-                            </Tooltip>
-                        </>
-                    }
-                    name="time"
-                >
+                <Form.Item style={{marginBottom: 10}} label={"Time"} name="time" labelCol={{style: {flex: "0 0 40px"}}}>
                     <DatePicker.RangePicker
                         allowClear={false}
                         presets={[
-                            {label: "Today", value: [dayjs().utc().startOf("day"), dayjs().utc().endOf("day")]},
-                            {label: "Yesterday", value: [dayjs().utc().startOf("day").subtract(1, "day"), dayjs().utc().endOf("day").subtract(1, "day")]},
-                            {label: "This Month", value: [dayjs().utc().startOf("month"), dayjs().utc().endOf("month")]},
-                            {label: "Last Month", value: [dayjs().utc().startOf("month").subtract(1, "month"), dayjs().utc().subtract(1, "month").endOf("month")]},
+                            {label: "Today", value: [dayjs().startOf("day"), dayjs().endOf("day")]},
+                            {label: "Yesterday", value: [dayjs().startOf("day").subtract(1, "day"), dayjs().endOf("day").subtract(1, "day")]},
+                            {label: "This Month", value: [dayjs().startOf("month"), dayjs().endOf("month")]},
+                            {label: "Last Month", value: [dayjs().subtract(1, "month").startOf("month"), dayjs().subtract(1, "month").endOf("month")]},
                         ]}
                     />
+                </Form.Item>
+                <Form.Item style={{marginBottom: 10}} label={"Timezone"} name="timezone" labelCol={{style: {flex: "0 0 70px"}}}>
+                    <Select showSearch optionFilterProp="children" style={{width: "230px"}}>
+                        {timezones.map(tz => (
+                            <Select.Option key={tz.value} value={tz.value}>
+                                {tz.label}
+                            </Select.Option>
+                        ))}
+                    </Select>
                 </Form.Item>
                 <Form.Item style={{marginBottom: 10, marginRight: 50}} label={"Dimensions"} name="dimensions" labelCol={{style: {flex: "0 0 85px"}}}>
                     <Select key={"select"} mode="multiple" placeholder="Please select" style={{width: "260px"}} maxTagCount={2}>
@@ -249,8 +251,8 @@ const GameWin = () => {
                 options={params}
                 columns={[intervals.find(interval => interval.dataIndex === params.interval), ...columns.filter(column => params.dimensions.includes(column.dataIndex) || !column.group)]}
                 filter={[
-                    {type: "GREATER_OR_EQUAL", field: "date", value: dayjs(params.time[0]).format("YYYY-MM-DD")},
-                    {type: "LOWER", field: "date", value: dayjs(params.time[1]).add(1, "day").format("YYYY-MM-DD")},
+                    {type: "GREATER_OR_EQUAL", field: "date", value: dayjs.tz(params.time[0], safeTimezone).startOf("day").utc().format("YYYY-MM-DD HH:mm:ss")},
+                    {type: "LOWER", field: "date", value: dayjs.tz(params.time[1], safeTimezone).add(1, "day").startOf("day").utc().format("YYYY-MM-DD HH:mm:ss")},
                 ]}
             />
         </>

@@ -117,13 +117,13 @@ async function init() {
         replica: {...dbOptions("adapter"), host: process.env.REPLICA_DB_HOST, port: process.env.REPLICA_DB_PORT || process.env.DB_PORT, synchronize: false, migrationsRun: false, installExtensions: false} as DataSourceOptions,
         primary: {...dbOptions("adapter")},
     });
+    await initRedis("adapter");
     await initApi(api);
     await initRgsApi(api);
     await initWalletApi(api);
     initMail();
     initAdapterMetrics();
 
-    await initRedis("adapter");
     initScheduler(1000);
     await scheduledTasks();
 

@@ -616,10 +616,13 @@ describe("api", () => {
         expect(res2.body).toEqual({"test-provider": ["test-game", "game2", "test-game-disabled", "test-game2"]});
     });
 
-    test("currencyDecimals", async () => {
-        invalidate("currency");
-        await wait(100);
+    test("currencyDecimals - authenticated", async () => {
         await Currency.insert({currency: "myprize-sc", fixedRate: 1, decimals: 2, symbol: "SC"});
+        await Settings.insert({priority: 100, key: "maxDecimals", value: "5", serverOnly: true, wallets: ["test-wallet"]});
+        await Currency.insert({currency: "btc", fixedRate: 0.00001, decimals: 8, symbol: "BTC"});
+        invalidate("settings");
+        invalidate("currency");
+        await wait(50);
 
         const {token} = await authenticate();
         const res = await request(api).get("/currencyDecimals").auth(token, {type: "bearer"}).expect(200);
@@ -630,6 +633,31 @@ describe("api", () => {
 
         expect(res.body["SC"]).toBeUndefined();
         expect(res.body["myprize-sc"]).toBe(2);
+        expect(res.body["btc"]).toBe(5);
+    });
+
+    test("currencyDecimals - public", async () => {
+        await Settings.insert({priority: 100, key: "maxDecimals", value: "5", serverOnly: true, wallets: ["test-wallet"]});
+        await Currency.insert({currency: "btc2", fixedRate: 0.00001, decimals: 8, symbol: "BTC2"});
+        invalidate("settings");
+        invalidate("currency");
+        await wait(50);
+
+        const res = await request(api).get("/currencyDecimals").expect(200);
+        expect(res.body["btc2"]).toBe(2);
+    });
+
+    test("currencyDecimals - player id", async () => {
+        await Settings.insert({priority: 100, key: "maxDecimals", value: "4", serverOnly: true, wallets: ["test-wallet-btc3"]});
+        await Currency.insert({currency: "btc3", fixedRate: 0.00001, decimals: 8, symbol: "BTC3"});
+        invalidate("settings");
+        invalidate("currency");
+        await wait(50);
+
+        mockResponse({wallet: "test-wallet-btc3"});
+
+        const res = await request(api).get("/currencyDecimals?playerId=a7f413b8-df63-4823-88bf-07492f33be57").expect(200);
+        expect(res.body["btc3"]).toBe(4);
     });
 
     test("convertBet", async () => {

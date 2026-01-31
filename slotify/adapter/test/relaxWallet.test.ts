@@ -61,14 +61,23 @@ beforeAll(async () => {
     await Game.create({game: "test-game", title: "Test Game", provider: "test-provider", rgs: "test-rgs"}).save();
 
     await CurrencyAlias.create({currency: "eur", alias: "gc-1000000", multiplier: 0}).save();
+    await CurrencyAlias.create({currency: "eur", alias: "gc-default", multiplier: 0}).save();
+    await CurrencyAlias.create({currency: "eur", alias: "sc-default", multiplier: 0}).save();
+    await CurrencyAlias.create({currency: "eur", alias: "sc-100", multiplier: 0}).save();
+    await CurrencyAlias.create({currency: "eur", alias: "gc-2000", multiplier: 0}).save();
     await CurrencyExchange.create({currency: "sek", rate: 1, date: new Date()}).save();
     await CurrencyExchange.create({currency: "eur", rate: 1, date: new Date()}).save();
     await CurrencyExchange.create({currency: "gc-1000000", rate: 1, date: new Date()}).save();
+    await CurrencyExchange.create({currency: "gc-default", rate: 1, date: new Date()}).save();
+    await CurrencyExchange.create({currency: "sc-default", rate: 1, date: new Date()}).save();
+    await CurrencyExchange.create({currency: "sc-100", rate: 1, date: new Date()}).save();
+    await CurrencyExchange.create({currency: "gc-2000", rate: 1, date: new Date()}).save();
     await Wallet.create({
         id: "currencies-aliases-relax-wallet",
         adapter: "relax",
         config: {
             ...walletConfig,
+            currencyAliases: {"GC.": "gc-default", "SC": "sc-default"},
             currencyAliasesPerBrand: {"GC.": {"10": "gc-1000000", "20": "gc-2000"}, "SC": {"10": "sc-100"}},
         },
     }).save();
@@ -919,12 +928,14 @@ describe("relax wallet adapter", () => {
         ["USD", "10", "usd"],
         ["GC.", "10", "gc-1000000"],
         ["GC.", "20", "gc-2000"],
-        ["GC.", undefined, "gc."],
-        ["GC.", "30", "gc."],
-        ["GC.", undefined, "gc."],
+        ["GC.", undefined, "gc-default"],
+        ["GC.", "30", "gc-default"],
+        ["SC", "10", "sc-100"],
+        ["SC", "30", "sc-default"],
+        ["SC", undefined, "sc-default"],
         [undefined, "10", "eur"],
         [undefined, undefined, "eur"],
-    ])("fromRelaxCurrency(%s, %s)", async (relaxCurrency?: string, brand?: string, currency?: string) => {
+    ])("fromRelaxCurrency(%s, %s) - priority: currencyAliasesPerBrand > currencyAliases > original", async (relaxCurrency?: string, brand?: string, currency?: string) => {
         const walletAdapter = (await getWalletAdapter("currencies-aliases-relax-wallet")) as RelaxWalletAdapter;
         expect(walletAdapter.fromRelaxCurrency(relaxCurrency, brand)).toEqual(currency);
     });
@@ -946,8 +957,91 @@ describe("relax wallet adapter", () => {
         ["gc-1000000", "20", "GC-1000000"],
         ["gc-2000", "20", "GC."],
         ["gc-2000", undefined, "GC-2000"],
-    ])("toRelaxCurrency(%s, %s)", async (currency: string, brand?: string, relaxCurrency?: string) => {
+        ["gc-default", "30", "GC."],
+        ["gc-default", undefined, "GC."],
+        ["sc-default", "30", "SC"],
+        ["sc-default", undefined, "SC"],
+        ["sc-100", "10", "SC"],
+    ])("toRelaxCurrency(%s, %s) - priority: currencyAliasesPerBrand > currencyAliases > original", async (currency: string, brand?: string, relaxCurrency?: string) => {
         const walletAdapter = (await getWalletAdapter("currencies-aliases-relax-wallet")) as RelaxWalletAdapter;
         expect(walletAdapter.toRelaxCurrency(currency, brand)).toEqual(relaxCurrency);
     });
+
+    test(
+        "currency alias fallback - authenticate and transaction",
+        async () => {
+            const launcherQueryWithBrand30 = {...createLauncherQuery(), partnerid: 30};
+            const response = await request(api).get("/wallet/currencies-aliases-relax-wallet/launcher").query(launcherQueryWithBrand30);
+
+            const [, paramsUrl] = response.headers.location.split("?");
+            const searchParams = new URLSearchParams(paramsUrl);
+
+            const key = searchParams.get("key")!;
+
+            const verifyPlayerResponse = {
+                playerid: 10001,
+                countrycode: "GB",
+                currency: "SC",
+                jurisdiction: "UK",
+                balance: 26447,
+                sessionid: 10001,
+                partnerid: 30,
+            };
+            queueMockFetchResponse(verifyPlayerResponse);
+            queueMockFetchAndParseResponse({data: {campaigns: {items: []}}});
+
+            const authenticateRequestParams = {
+                wallet: "currencies-aliases-relax-wallet",
+                operator: "test-operator",
+                key,
+                provider: "test-provider",
+                game: "test-game",
+            };
+            const authenticateResponse = await request(api).post("/rgs/test-rgs/authenticate").set(rgsHeader(authenticateRequestParams)).send(authenticateRequestParams);
+
+            expect(authenticateResponse.body.currency).toEqual("sc-default");
+
+            const transactionWalletResponse = {
+                sessionid: 10001,
+                balance: 100001,
+                relaxtxid: 10001,
+                txid: "759092",
+            };
+            queueMockFetchResponse(transactionWalletResponse, 200);
+
+            const withdrawRequest = {
+                amount: 50,
+                type: "withdraw",
+                provider: "test-provider",
+                game: "test-game",
+                rgsTransactionId: "rgs-transaction-id-withdraw-" + v4(),
+                roundId: "round-id-" + v4(),
+                playerId: authenticateResponse.body.playerId,
+            };
+            await request(api).put("/rgs/test-rgs/transaction").set(rgsHeader(withdrawRequest)).send(withdrawRequest);
+
+            const player = await Player.findOneByOrFail({id: withdrawRequest.playerId});
+            expect(player.currency).toEqual("sc-default");
+
+            const [, requestParams] = mockedFetch.mock.calls[1];
+            expect(JSON.parse(requestParams!.body as string).currency).toEqual("SC");
+
+            queueMockFetchResponse({...transactionWalletResponse, balance: 100051}, 200);
+
+            const depositRequest = {
+                amount: 100,
+                type: "deposit",
+                provider: "test-provider",
+                game: "test-game",
+                rgsTransactionId: "rgs-transaction-id-deposit-" + v4(),
+                roundId: withdrawRequest.roundId,
+                playerId: authenticateResponse.body.playerId,
+            };
+            await request(api).put("/rgs/test-rgs/transaction").set(rgsHeader(depositRequest)).send(depositRequest);
+
+            const [, depositRequestParams] = mockedFetch.mock.calls[2];
+            expect(JSON.parse(depositRequestParams!.body as string).currency).toEqual("SC");
+        },
+        TESTS_TIMEOUT,
+    );
 });

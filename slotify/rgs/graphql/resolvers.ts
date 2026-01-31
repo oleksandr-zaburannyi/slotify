@@ -29,6 +29,7 @@ import {SelectQueryBuilder} from "typeorm";
 import {getCurrencies} from "../util/adapterUtil";
 import {getInTimezone, getPreviousDayInTimezone} from "@slotify/shared/lib/time";
 import {payDrawWin} from "../multiplayer/tick";
+import {v4} from "uuid";
 
 interface IContext {
     account: IAccount;
@@ -116,6 +117,9 @@ export default {
             const columns: IColumn[] = [
                 {alias: "roundId", sql: "round.roundId", filters: ["EQUAL"], type: "uuid"},
                 {alias: "createdAt", sql: "round.createdAt", filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"]},
+                {alias: "failedAt", sql: "round.failedAt", filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"]},
+                {alias: "failReason", sql: "round.failReason", filters: ["LIKE"]},
+                {alias: "completedAt", sql: "round.completedAt", filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"]},
                 {alias: "playerId", sql: "round.playerId", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
                 {alias: "status", sql: "round.status", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
                 {alias: "game", sql: "round.game", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
@@ -130,7 +134,6 @@ export default {
                 {alias: "playerId", sql: "round.playerId", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"], group: true},
                 {alias: "status", sql: "round.status", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "IN"], group: true},
                 {alias: "game", sql: "round.game", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"], group: true},
-                {alias: "variant", sql: "round.variant", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"], group: true},
 
                 {alias: "wallet", sql: "player.wallet", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "IN"], group: true},
                 {alias: "operator", sql: "player.operator", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "IN"], group: true},
@@ -151,14 +154,18 @@ export default {
             account.brands && filter.push({field: "brand", type: "IN", value: account.brands});
 
             options?.wallet && filter.push({field: "wallet", type: "EQUAL", value: options.wallet});
-            filter.push({field: "status", type: "IN", value: ["started", "finishing", "unpaid", "failed"]});
+            filter.push({field: "status", type: "IN", value: ["started", "unpaid", "failed"]});
 
             const joins: IJoin[] = [
                 {entity: "adapter_player", alias: "player", condition: "player.id = round.playerId"}, //warning: this is joining with a table from adapter service
                 {entity: Wager, alias: "wager", condition: "wager.roundId = round.roundId"},
             ];
             const result = await generate(Round, "round", joins, columns, sort, filter, Math.min(limit, 10000), offset);
-            result.items = result.items.map(item => ({...item, createdAt: getInTimezone(item.createdAt.getTime(), "America/New_York").toISO()}));
+            result.items = result.items.map(item => {
+                const dateObj = getInTimezone(item.createdAt.getTime(), "America/New_York").toJSDate();
+                const date = `${String(dateObj.getMonth() + 1).padStart(2, "0")}/${String(dateObj.getDate()).padStart(2, "0")}/${dateObj.getFullYear()}`; //format mm/dd/yyyy
+                return {date, game: item.game, roundId: item.roundId, playerId: item.playerId, status: item.status, brand: item.brand, bet: item.bet, win: item.win};
+            });
             return result;
         },
         async DGE_cancelledRounds(_: any, {sort, filter = [], options, limit, offset}: IOptions, account: IAccount) {
@@ -170,12 +177,10 @@ export default {
                 {alias: "playerId", sql: "round.playerId", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"], group: true},
                 {alias: "status", sql: "round.status", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "IN"], group: true},
                 {alias: "game", sql: "round.game", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"], group: true},
-                {alias: "variant", sql: "round.variant", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"], group: true},
 
                 {alias: "wallet", sql: "player.wallet", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "IN"], group: true},
                 {alias: "operator", sql: "player.operator", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "IN"], group: true},
                 {alias: "brand", sql: "player.brand", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "IN"], group: true},
-                {alias: "currency", sql: "player.currency", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "IN"], group: true},
 
                 {alias: "win", sql: "SUM(wager.win)", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
                 {alias: "bet", sql: "SUM(wager.bet)", filters: ["EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
@@ -199,7 +204,11 @@ export default {
                 {entity: Wager, alias: "wager", condition: "wager.roundId = round.roundId"},
             ];
             const result = await generate(Round, "round", joins, columns, sort, filter, limit, offset);
-            result.items = result.items.map(item => ({...item, createdAt: getInTimezone(item.createdAt.getTime(), "America/New_York").toISO()}));
+            result.items = result.items.map(item => {
+                const dateObj = getInTimezone(item.createdAt.getTime(), "America/New_York").toJSDate();
+                const date = `${String(dateObj.getMonth() + 1).padStart(2, "0")}/${String(dateObj.getDate()).padStart(2, "0")}/${dateObj.getFullYear()}`; //format mm/dd/yyyy
+                return {date, game: item.game, roundId: item.roundId, playerId: item.playerId, failReason: item.failReason, brand: item.brand};
+            });
             return result;
         },
         async settings(_: any, {sort, filter = [], limit = 10, offset}: IOptions, {account}: IContext) {
@@ -422,6 +431,7 @@ export default {
             return true;
         },
         async addSetting(_: any, {data}: {data: Settings}, {account}: IContext) {
+            if (!data.settingId) data.settingId = v4();
             validateSettingsSet(data, account);
             const {id} = await Settings.save(Settings.create(data));
             invalidate("settings");

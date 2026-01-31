@@ -1,5 +1,5 @@
 export function toCSV(items: any[]) {
-    const separator = ";";
+    const separator = ",";
     const content =
         Object.keys(items[0] || {})
             .map(value => `"${value}"`)
@@ -19,6 +19,6 @@ export function toCSV(items: any[]) {
 function valueToString(value: any): string {
     if (value === undefined) return "";
     if (value === null) return "";
-    if (value.toString() === "[object Object]") return JSON.stringify(value).replace(/"/g, `\\"`).replace(/;/g, `\\;`);
-    return value.toString().replaceAll(`"`, `\\"`);
+    if (value.toString() === "[object Object]") return JSON.stringify(value).replace(/"/g, `""`);
+    return value.toString().replaceAll(`"`, `""`);
 }

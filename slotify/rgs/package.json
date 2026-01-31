@@ -1,6 +1,6 @@
 {
     "name": "@slotify/rgs",
-    "version": "4.1.19",
+    "version": "4.2.0",
     "author": "",
     "license": "UNLICENSED",
     "publishConfig": {
@@ -30,7 +30,7 @@
         "@graphql-tools/load": "^8.1.2",
         "@graphql-tools/schema": "^10.0.25",
         "@jest/globals": "^30.0.5",
-        "@slotify/shared": "^2.1.11",
+        "@slotify/shared": "^2.2.0",
         "@types/express": "^5.0.3",
         "@types/jest": "^30.0.0",
         "@types/node": "^24.1.0",

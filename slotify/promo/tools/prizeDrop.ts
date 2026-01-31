@@ -2,13 +2,14 @@ import Exception from "@slotify/shared/lib/Exception";
 import {ITool} from "../util/ITool";
 import {getCurrencies} from "../util/currencyRates";
 import exchangePrizeValue from "../util/exchangePrizeValue";
-import validateCampaignPrizes, {IPrizeConfig} from "../util/validateCampaignPrizes";
+import validateCampaignPrizes, {IPrizeConfig, validateCurrencyOverrides} from "../util/validateCampaignPrizes";
 import {createRandom} from "@slotify/rng/lib/random/factory";
+import {incrementQualifiedBets, isQualifyingBet} from "../util/qualifiedBets";
 
 type IPrizeWon = {roundId: string; type: "cash" | "item" | "multiplier"; value: number | string; winTime: number};
-type ICampaignConfig = {qualifyingBet: number; probability: number; boostedProbabilityStart: number; prizes: IPrizeConfig[]};
+type ICampaignConfig = {qualifyingBet: number; qualifyingBetOverrides?: Record<string, number>; probability: number; boostedProbabilityStart: number; prizes: IPrizeConfig[]};
 type ICampaignState = {amountsLeft: number[]; _fixedCurrencyRates: Record<string, number>};
-type IPlayerState = {exchangedQualifyingBet: number; exchangedCashValues: number[]; exchangedLimits: number[]; prizesWon: IPrizeWon[]; _winningRoundId: string; _winningRoundBet: number};
+type IPlayerState = {qualifiedBets?: number; exchangedQualifyingBet: number; exchangedCashValues: number[]; exchangedLimits: number[]; prizesWon: IPrizeWon[]; _winningRoundId: string; _winningRoundBet: number};
 
 function calculateCurrentProbability(config: ICampaignConfig, end: Date) {
     if (!config.boostedProbabilityStart) {
@@ -24,23 +25,26 @@ function calculateCurrentProbability(config: ICampaignConfig, end: Date) {
     return Math.max(0, Math.min(1, probability));
 }
 
-function randomizePrizeWonIndex(campaignState: ICampaignState) {
-    const totalAmountsLeft = campaignState.amountsLeft.reduce((totalAmountsLeft, amountLeft) => totalAmountsLeft + amountLeft, 0);
+function randomizePrizeWonIndex(campaignState: ICampaignState, config: ICampaignConfig) {
+    const weightedAmounts = campaignState.amountsLeft.map((amountLeft, i) => amountLeft * (config.prizes[i].weight ?? 1));
+    const totalWeighted = weightedAmounts.reduce((sum, w) => sum + w, 0);
 
     const random = createRandom();
-    const index = random(totalAmountsLeft);
+    const index = random(totalWeighted);
 
     let prizeIndex = 0;
-    let prizesSkipped = campaignState.amountsLeft[prizeIndex];
+    let prizesSkipped = weightedAmounts[prizeIndex];
     while (index >= prizesSkipped) {
         prizeIndex++;
-        prizesSkipped += campaignState.amountsLeft[prizeIndex];
+        prizesSkipped += weightedAmounts[prizeIndex];
     }
     return prizeIndex;
 }
 
 function validateCommonConfig(config: ICampaignConfig, end: number) {
     if (config.qualifyingBet === undefined || typeof config.qualifyingBet !== "number") throw new Exception("Qualifying Bet needs to be configured");
+
+    validateCurrencyOverrides(config.qualifyingBetOverrides, "Qualifying bet");
 
     if (!end) throw new Exception("Prize Drop campaign requires End date to be set");
 
@@ -86,6 +90,8 @@ export const prizeDrop: ITool<ICampaignConfig, IPlayerState, ICampaignState> = {
 
         if (previousCampaign.config.qualifyingBet !== config.qualifyingBet) throw new Exception("Prize Drop qualifying bet cannot be edited");
 
+        if (JSON.stringify(previousCampaign.config.qualifyingBetOverrides) !== JSON.stringify(config.qualifyingBetOverrides)) throw new Exception("Prize Drop qualifying bet overrides cannot be edited");
+
         return previousState;
     },
 
@@ -93,12 +99,28 @@ export const prizeDrop: ITool<ICampaignConfig, IPlayerState, ICampaignState> = {
         const campaignState = await loadCampaignState(true);
 
         const fixedCurrencyRate = campaignState._fixedCurrencyRates[player.currency];
-        const exchangedQualifyingBet = config.qualifyingBet * fixedCurrencyRate;
-        const exchangedCashValues = config.prizes.map(prize => (prize.type === "cash" ? exchangePrizeValue(prize.value as number, fixedCurrencyRate) : 0));
-        const exchangedLimits = config.prizes.map(prize => (prize.type === "multiplier" && Number.isFinite(prize.limit) ? exchangePrizeValue(prize.limit, fixedCurrencyRate) : 0));
+        if (fixedCurrencyRate === undefined) {
+            throw new Exception(`Currency ${player.currency} not found in campaign rates`);
+        }
+
+        // Check for qualifying bet currency override, fall back to exchange calculation
+        const exchangedQualifyingBet = config.qualifyingBetOverrides?.[player.currency] ?? config.qualifyingBet * fixedCurrencyRate;
+
+        // Check for prize currency overrides, fall back to exchange calculation
+        const exchangedCashValues = config.prizes.map(prize => {
+            if (prize.type !== "cash") return 0;
+            return prize.currencyOverrides?.[player.currency] ?? exchangePrizeValue(prize.value as number, fixedCurrencyRate);
+        });
+
+        // Check for multiplier limit currency overrides, fall back to exchange calculation
+        const exchangedLimits = config.prizes.map(prize => {
+            if (prize.type !== "multiplier" || !Number.isFinite(prize.limit)) return 0;
+            return prize.currencyOverrides?.[player.currency] ?? exchangePrizeValue(prize.limit, fixedCurrencyRate);
+        });
 
         return {
             playerState: {
+                qualifiedBets: 0,
                 exchangedQualifyingBet,
                 exchangedCashValues,
                 exchangedLimits,
@@ -114,23 +136,30 @@ export const prizeDrop: ITool<ICampaignConfig, IPlayerState, ICampaignState> = {
     },
 
     async withdrawFinished({transaction, config, loadPlayerState, end}): Promise<any> {
+        const playerState = await loadPlayerState();
+
+        if (!isQualifyingBet(transaction.amount, playerState.exchangedQualifyingBet)) {
+            return {};
+        }
+
         const currentProbability = calculateCurrentProbability(config, end);
 
         const random = createRandom();
         const rngResult = random() / 2 ** 32;
 
         if (rngResult >= currentProbability) {
-            return {};
-        }
-
-        const playerState = await loadPlayerState();
-        if (transaction.amount < playerState.exchangedQualifyingBet) {
-            return {};
+            return {
+                playerState: {
+                    ...playerState,
+                    qualifiedBets: incrementQualifiedBets(playerState.qualifiedBets),
+                },
+            };
         }
 
         return {
             playerState: {
                 ...playerState,
+                qualifiedBets: incrementQualifiedBets(playerState.qualifiedBets),
                 _winningRoundId: transaction.roundId,
                 _winningRoundBet: transaction.amount,
             },
@@ -171,7 +200,7 @@ export const prizeDrop: ITool<ICampaignConfig, IPlayerState, ICampaignState> = {
             };
         }
 
-        const prizeIndex = randomizePrizeWonIndex(lockedCampaignState);
+        const prizeIndex = randomizePrizeWonIndex(lockedCampaignState, config);
 
         const prizeWonConfig = config.prizes[prizeIndex];
         const prizeJustWon = {
@@ -191,6 +220,7 @@ export const prizeDrop: ITool<ICampaignConfig, IPlayerState, ICampaignState> = {
         newCampaignState.amountsLeft[prizeIndex]--;
 
         const newPlayerState = {
+            qualifiedBets: playerState.qualifiedBets,
             exchangedQualifyingBet: playerState.exchangedQualifyingBet,
             exchangedCashValues: playerState.exchangedCashValues,
             exchangedLimits: playerState.exchangedLimits,

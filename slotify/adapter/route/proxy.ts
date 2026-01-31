@@ -170,11 +170,18 @@ export default {
         try {
             logger.info(`Sending transaction ${transactionId}`, {playerId, nativeId, wallet, operator, brand, transaction});
 
-            const startTime = new Date().getTime();
             const walletTransaction: IWalletTransaction = {transactionId, createdAt: createdAt!, ...transaction};
             const originalSession = existingTransaction?.sessionId ? await Session.get(existingTransaction.sessionId) : null;
-            const {balance, popups} = await executeInQueue(await getParallelTransactionId(wallet, playerId), async () => await walletAdapter.transaction(player, walletTransaction, session, originalSession), 20, 60000);
-            const responseTime = new Date().getTime() - startTime;
+            const {balance, popups, responseTime} = await executeInQueue(
+                await getParallelTransactionId(wallet, playerId),
+                async () => {
+                    const startTime = Date.now();
+                    const result = await walletAdapter.transaction(player, walletTransaction, session, originalSession);
+                    return {...result, responseTime: Date.now() - startTime};
+                },
+                20,
+                40000,
+            );
 
             if (callFinished) {
                 const res = await sendToPromo(transaction.type + "Finished", transaction.category, {transactionId, ...transaction, playerId, nativeId, wallet, operator, brand, currency, jurisdiction, nickname});
@@ -193,6 +200,22 @@ export default {
             logger.info(`Transaction failed ${transactionId} (${code})`, {playerId, nativeId, wallet, operator, brand, transaction, error: e});
             serviceMetrics.updateFailedTransactionsCounter(transaction.game!, e.message, wallet, e.data?.error, operator, code, brand);
             await Transaction.failed(transactionId, code);
+
+            // Notify promo to clean up any state from the failed withdraw
+            if (transaction.type === "withdraw") {
+                await sendToPromo("withdrawFailed", transaction.category, {
+                    transactionId,
+                    ...transaction,
+                    playerId,
+                    nativeId,
+                    wallet,
+                    operator,
+                    brand,
+                    currency,
+                    jurisdiction,
+                    nickname,
+                }).catch(err => logger.warn("Failed to notify promo of withdrawFailed", {transactionId, error: err}));
+            }
 
             if (e instanceof Exception) {
                 throw e;
@@ -231,7 +254,7 @@ export default {
                 await getParallelTransactionId(wallet, transaction.playerId),
                 async () => await walletAdapter.cancel(player, {transactionId: transaction.id, ...transaction} as IWalletTransaction, session, originalSession, auto),
                 20,
-                60000,
+                40000,
             );
             logger.info(`Transaction cancelled ${transaction.id}`, {balance, wallet, operator, brand, nativeId, transactionId: transaction.id});
             await Transaction.cancelled(transaction.id);

@@ -1,6 +1,6 @@
 import Exception, {IExceptionPopup, IExceptionPopupButton} from "@slotify/shared/lib/Exception";
 import IWalletAdapter, {ISession, IWalletAuthenticate, IWalletBalance, IWalletTransaction} from "./IWalletAdapter";
-import {Express, Request, Response} from "express";
+import {Router, Request, Response} from "express";
 import logger from "@slotify/shared/lib/logger";
 import fetch, {Agent, fetchAndParse} from "@slotify/shared/lib/fetch";
 import {v4} from "uuid";
@@ -478,7 +478,7 @@ export class PlaytechWalletAdapter implements IWalletAdapter {
     cipher!: Cipher;
     agent!: Agent;
 
-    async init(wallet: string, api: Express, path: string, config: IConfig, whitelistedIps?: string[]) {
+    async init(wallet: string, router: Router, config: IConfig, whitelistedIps?: string[]) {
         this.wallet = wallet;
         this.config = config;
         this.cipher = new Cipher(`${this.config.gsId}_${this.config.mfgCode}_${this.config.passphrase}`, this.wallet);
@@ -492,7 +492,7 @@ export class PlaytechWalletAdapter implements IWalletAdapter {
             },
         });
 
-        api.get(path + "/launch", async (req: Request<unknown, unknown, unknown, ILaunchParams>, res) => {
+        router.get("/launch", async (req: Request<unknown, unknown, unknown, ILaunchParams>, res) => {
             const operator = /*req.query.licenseeid || */ "playtech";
             const brand = req.query.skinid;
             const lobbyUrl = req.query.backurl;
@@ -522,7 +522,7 @@ export class PlaytechWalletAdapter implements IWalletAdapter {
             res.redirect(launchUrl);
         });
 
-        api.get(path + "/dgh", async (req: Request<unknown, unknown, unknown, IDetailedGameHistory>, res) => {
+        router.get("/dgh", async (req: Request<unknown, unknown, unknown, IDetailedGameHistory>, res) => {
             const roundId = req.query.gameCycleId;
             const [game] = req.query.gameId.split(gameVariantSeparator);
             const [language] = req.query.languageCode.toLowerCase().split("-");
@@ -531,7 +531,7 @@ export class PlaytechWalletAdapter implements IWalletAdapter {
             res.redirect(launchUrl);
         });
 
-        api.post(path + "/close-round", ipFilter(whitelistedIps), async (req: Request<unknown, unknown, ICloseRoundBody>, res: Response<ICloseRoundResponse>) => {
+        router.post("/close-round", ipFilter(whitelistedIps), async (req: Request<unknown, unknown, ICloseRoundBody>, res: Response<ICloseRoundResponse>) => {
             const gsId = req.body.gsId;
             const gpId = req.body.gpId;
             const roundId = req.body.data.gameCycleId;
@@ -546,11 +546,11 @@ export class PlaytechWalletAdapter implements IWalletAdapter {
             res.json({gsId, gpId, command: "PTC_ResolveGameCycleAck", requestId: v4()});
         });
 
-        api.get(path + "/config-schema.json", async (req: Request, res: Response) => {
-            res.json(configSchema(process.env.URL + path + "/config-schema.json"));
+        router.get("/config-schema.json", async (req: Request, res: Response) => {
+            res.json(configSchema(process.env.URL + `/wallet/${wallet}` + "/config-schema.json"));
         });
 
-        api.post(path + "/tpi", async (req: Request<unknown, unknown, IGetGamesBody>, res: Response<IGetGamesResponse>) => {
+        router.post("/tpi", async (req: Request<unknown, unknown, IGetGamesBody>, res: Response<IGetGamesResponse>) => {
             const igpId = req.body.request.igpId;
             const rgsId = req.body.request.rgsId;
             const gamesWithVariant: [Game, IPaytable][] = [];
@@ -580,9 +580,9 @@ export class PlaytechWalletAdapter implements IWalletAdapter {
                             mfgCode: this.config.mfgCode,
                             packageVersion: "1.0.0",
                             gameType: (item.type && typeMapping[item.type]) || ("spinningReel" as any),
-                            configSchema: process.env.URL + path + "/config-schema.json",
+                            configSchema: process.env.URL + `/wallet/${wallet}` + "/config-schema.json",
                             configHash: createHash("sha1")
-                                .update(JSON.stringify(configSchema(process.env.URL + path + "/config-schema.json")))
+                                .update(JSON.stringify(configSchema(process.env.URL + `/wallet/${wallet}` + "/config-schema.json")))
                                 .digest("hex"),
                             channelArray: [
                                 {channelType: "desktop", presentType: "HTML5"},
@@ -602,7 +602,7 @@ export class PlaytechWalletAdapter implements IWalletAdapter {
             res.json(response);
         });
 
-        api.get(path + "/healthcheck", ipFilter(whitelistedIps), async (_, res) => {
+        router.get("/healthcheck", ipFilter(whitelistedIps), async (_, res) => {
             res.json({status: "ok"});
         });
     }

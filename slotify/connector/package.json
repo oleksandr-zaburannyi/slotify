@@ -1,6 +1,6 @@
 {
     "name": "@slotify/connector",
-    "version": "2.2.10",
+    "version": "2.3.0",
     "publishConfig": {
         "registry": "https://npm.pkg.github.com/"
     },
@@ -26,7 +26,7 @@
     "dependencies": {
         "@jest/globals": "^30.0.5",
         "@rlx/feim": "^1.17.1",
-        "@slotify/shared": "^2.1.11",
+        "@slotify/shared": "^2.2.0",
         "@testing-library/jest-dom": "^6.6.4",
         "@types/react": "^19.1.9",
         "@types/react-dom": "^19.1.7",

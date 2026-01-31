@@ -122,6 +122,15 @@ export const freeBets: ITool<IConfig, IPlayerState> = {
             return {playerState};
         }
     },
+    async withdrawFailed({loadPlayerState, transaction}) {
+        if (transaction.category !== "normal") return;
+
+        const playerState = await loadPlayerState();
+        if (playerState._rounds[transaction.roundId]) {
+            delete playerState._rounds[transaction.roundId];
+            return {playerState};
+        }
+    },
     async cancel({loadPlayerState, transaction}) {
         if (transaction.category !== "normal") return;
 

@@ -1,7 +1,7 @@
 /**
  * BetConstruct wallet adapter
  */
-import {Express, NextFunction, Request, Response} from "express";
+import {Router, NextFunction, Request, Response} from "express";
 import {check, query} from "express-validator";
 import {gql} from "graphql-request";
 import * as crypto from "crypto";
@@ -59,14 +59,14 @@ export class BetConstructWalletAdapter implements IWalletAdapter {
         res.status(403).json({err_code: 403, err_desc: "Couldn't authorize the request"});
     }
 
-    async init(wallet: string, api: Express, path: string, config: IConfig) {
+    async init(wallet: string, router: Router, config: IConfig) {
         this.wallet = wallet;
         this.config = config;
         this.cipher = new Cipher(this.config.secretKey, this.wallet);
 
         // wallet/betconstruct/launch
-        api.get(
-            path + "/launch",
+        router.get(
+            "/launch",
             this.validateGetRequest.bind(this),
             validate([
                 query("mode").isIn(["demo", "real_play"]),
@@ -134,8 +134,8 @@ export class BetConstructWalletAdapter implements IWalletAdapter {
         );
 
         // wallet/betconstruct/launch/replay
-        api.get(
-            path + "/launch/replay",
+        router.get(
+            "/launch/replay",
             this.validateGetRequest.bind(this),
             validate([query("operatorId").isString().exists().isLength({max: 255}), query("gameId").isString().exists().isLength({max: 255}), query("roundId").isString().exists().isLength({max: 255})]),
             async (req, res) => {
@@ -157,8 +157,8 @@ export class BetConstructWalletAdapter implements IWalletAdapter {
         );
 
         // wallet/betconstruct/freespins
-        api.post(
-            path + "/freespins",
+        router.post(
+            "/freespins",
             this.validateServer.bind(this),
             validate([
                 check("time").exists().notEmpty().isString().isLength({max: 255}),
