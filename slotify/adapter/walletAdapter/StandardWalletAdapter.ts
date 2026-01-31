@@ -4,11 +4,20 @@ import fetch from "@slotify/shared/lib/fetch";
 import {Player} from "../db/model/Player";
 import IWalletAdapter, {ISession, IWalletTransaction} from "./IWalletAdapter";
 import {isDevMode} from "@slotify/shared/lib/isDevMode";
-import {Express} from "express";
+import {Router} from "express";
 import logger from "@slotify/shared/lib/logger";
 import {correlationData} from "@slotify/shared/lib/asyncContext";
 import {clearEmpty} from "@slotify/shared/lib/clearEmpty";
 import {errorCodes} from "./walletAdapter";
+import {getRgsAdapter} from "../rgsAdapter/rgsAdapter";
+import {Game} from "../db/model/Game";
+import {Rgs} from "../db/model/Rgs";
+import {hmac} from "@slotify/shared/lib/middleware/hmac";
+import {validate} from "@slotify/shared/lib/middleware/validate";
+import {body} from "express-validator";
+import {ipFilter} from "../util/ip";
+import {availableGames} from "../route/availableGames";
+import launch from "../route/launch";
 
 interface IConfig {
     url: string;
@@ -18,6 +27,9 @@ interface IConfig {
     cancelUsePost?: string;
     overwriteGame?: string;
     useOriginalToken?: boolean;
+    currencyAliases?: Record<string, string>;
+    currencyAliasesPerBrand?: Record<string, Record<string, string>>;
+    hostname?: string;
 }
 
 export class StandardWalletAdapter implements IWalletAdapter {
@@ -25,9 +37,154 @@ export class StandardWalletAdapter implements IWalletAdapter {
     config!: IConfig;
     __debug: any;
 
-    async init(wallet: string, api: Express, path: string, config: any) {
+    private fromWalletCurrency(walletCurrency: string, brand?: string): string {
+        if (brand && this.config.currencyAliasesPerBrand?.[walletCurrency]?.[brand]) {
+            return this.config.currencyAliasesPerBrand[walletCurrency][brand];
+        }
+        if (this.config.currencyAliases?.[walletCurrency]) {
+            return this.config.currencyAliases[walletCurrency];
+        }
+        return walletCurrency;
+    }
+
+    private toWalletCurrency(currency: string, brand?: string): string {
+        if (this.config.currencyAliasesPerBrand && brand) {
+            for (const [walletCurrency, aliasesPerBrand] of Object.entries(this.config.currencyAliasesPerBrand)) {
+                if (aliasesPerBrand[brand] === currency) {
+                    return walletCurrency;
+                }
+            }
+        }
+        if (this.config.currencyAliases) {
+            for (const [walletCurrency, alias] of Object.entries(this.config.currencyAliases)) {
+                if (alias === currency) {
+                    return walletCurrency;
+                }
+            }
+        }
+        return currency;
+    }
+
+    async init(wallet: string, router: Router, config: IConfig, whitelistedIps?: string[]) {
         this.wallet = wallet;
         this.config = config;
+
+        const mapToRgs = async (games: string[]) => {
+            const {rgs, provider} = await Game.get(games[0]);
+            const {adapter, config: rgsConfig} = await Rgs.getById(rgs);
+            const rgsAdapter = getRgsAdapter(adapter);
+
+            const rgsGames = [];
+            for (const gameName of games) {
+                const game = await Game.get(gameName);
+                if (game.rgs !== rgs || game.provider !== provider) {
+                    throw new Exception("All games need to be from the same provider and rgs", {
+                        data: {
+                            game,
+                            provider,
+                            rgs,
+                        },
+                    });
+                }
+                rgsGames.push(await Game.toRgs(gameName));
+            }
+            return {rgsAdapter, rgsConfig, rgsGames};
+        };
+
+        router.post(
+            "/freeBets/add",
+            ipFilter(whitelistedIps),
+            hmac(config.secretKey),
+            validate([
+                body("walletCampaignId").isString().exists(),
+                body("games").isArray().exists(),
+                body("nativeIds").isArray().exists(),
+                body("start").isInt().optional(),
+                body("end").isInt().optional(),
+                body("bets").isInt().exists(),
+                body("amount").isFloat().exists(),
+                body("currency").isString().exists(),
+                body("operator").isString().exists(),
+                body("brand").isString().exists(),
+            ]),
+            async (req, res) => {
+                const {walletCampaignId, games, nativeIds, start, end, bets, amount, operator, brand} = req.body;
+                const currency = this.fromWalletCurrency(req.body.currency, brand);
+
+                const {rgsAdapter, rgsConfig, rgsGames} = await mapToRgs(games);
+
+                if (!rgsAdapter.addFreeBets) {
+                    throw new Exception("Free Bets API is not supported for the specified games", {data: {games}});
+                }
+
+                res.json(
+                    await rgsAdapter.addFreeBets(
+                        {
+                            walletCampaignId,
+                            games: rgsGames,
+                            nativeIds,
+                            start,
+                            end,
+                            bets,
+                            amount,
+                            currency,
+                        },
+                        rgsConfig,
+                        wallet,
+                        operator,
+                        brand,
+                    ),
+                );
+            },
+        );
+
+        router.post(
+            "/freeBets/remove",
+            ipFilter(whitelistedIps),
+            hmac(config.secretKey),
+            validate([body("walletCampaignId").isString().exists(), body("operator").isString().exists(), body("brand").isString().exists(), body("games").isArray().exists()]),
+            async (req, res) => {
+                const {walletCampaignId, games, operator, brand} = req.body;
+
+                const {rgsAdapter, rgsConfig} = await mapToRgs(games);
+
+                if (!rgsAdapter.removeFreeBets) {
+                    throw new Exception("Free Bets API is not supported for the specified games", {data: {games}});
+                }
+
+                res.json(await rgsAdapter.removeFreeBets(walletCampaignId, rgsConfig, wallet, operator, brand));
+            },
+        );
+
+        router.post(
+            "/freeBets/availableBets",
+            ipFilter(whitelistedIps),
+            hmac(config.secretKey),
+            validate([body("games").isArray().exists(), body("currencies").isArray().exists(), body("operator").isString().exists(), body("brand").isString().exists()]),
+            async (req, res) => {
+                const {games, operator, brand} = req.body;
+                const currencies = req.body.currencies.map((currency: string) => this.fromWalletCurrency(currency, brand));
+
+                const {rgsAdapter, rgsConfig, rgsGames} = await mapToRgs(games);
+
+                if (!rgsAdapter.availableBets) {
+                    throw new Exception("Free Bets API is not supported for the specified games", {data: {games}});
+                }
+
+                res.json(await rgsAdapter.availableBets({games: rgsGames, currencies}, rgsConfig, wallet, operator, brand));
+            },
+        );
+
+        router.post("/availableGames", ipFilter(whitelistedIps), hmac(config.secretKey), validate([body("operator").isString().optional({nullable: true}), body("brand").isString().optional({nullable: true})]), async (req, res) => {
+            const operator = req.body.operator;
+            const brand = req.body.brand;
+            res.json(await availableGames(this.wallet, operator, brand));
+        });
+
+        router.post("/launch/:mode", ipFilter(whitelistedIps), hmac(config.secretKey), validate([]), async (req, res) => {
+            const mode = req.params.mode as "real" | "fun" | "replay";
+            res.json({url: await launch(mode, {...req.body, hostname: config.hostname})});
+        });
     }
 
     private getUrl(params: Record<string, string>) {
@@ -85,7 +242,8 @@ export class StandardWalletAdapter implements IWalletAdapter {
         const wallet = this.wallet;
         const url = this.getUrl({operator});
         const data = await this.fetch(url + "/authenticate", "POST", {key, operator, wallet, provider, game: this.config.overwriteGame || game, ip, channel});
-        const {nativeId, token, currency, balance, country, brand, nickname, gender, jurisdiction, sessionData, campaignTypes} = data;
+        const {nativeId, token, balance, country, brand, nickname, gender, jurisdiction, sessionData, campaignTypes} = data;
+        const currency = this.fromWalletCurrency(data.currency, brand);
 
         if (!nativeId) throw new Exception("Incorrect nativeId returned", {data: {data, key, wallet, operator, game, nativeId}});
         if (!token) throw new Exception("Incorrect token returned", {data: {data, token, key, wallet, operator, game}});
@@ -108,7 +266,7 @@ export class StandardWalletAdapter implements IWalletAdapter {
     }
 
     async transaction(player: Player, transaction: IWalletTransaction, session: ISession, originalSession: ISession | null) {
-        const {id, nativeId, operator} = player;
+        const {id, nativeId, operator, currency} = player;
         const token = originalSession && this.config.useOriginalToken ? originalSession?.token : session.token;
 
         const requestParams = clearEmpty({
@@ -126,9 +284,11 @@ export class StandardWalletAdapter implements IWalletAdapter {
             name: transaction.name,
             campaignType: transaction.campaignType,
             campaignId: transaction.campaignId,
+            walletCampaignId: transaction.walletCampaignId,
             campaignData: transaction.campaignData,
             regulatory: transaction.regulatory,
             ip: transaction.ip,
+            currency: this.toWalletCurrency(currency, player.brand),
         });
 
         const method = this.config.transactionUsePost ? "POST" : "PUT";

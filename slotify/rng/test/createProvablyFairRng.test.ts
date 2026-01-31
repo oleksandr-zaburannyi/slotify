@@ -2,7 +2,9 @@ import {describe, test} from "@jest/globals";
 import {createProvablyFairRng} from "../random/createProvablyFairRng";
 
 jest.mock("@slotify/shared/lib/mail", () => ({sendMail: jest.fn, initMail: jest.fn}));
-jest.mock("../verify", () => ({verify: jest.requireActual("../verify").verify, setPeriodicVerification: jest.fn, setBackgroundCycling: jest.fn}));
+jest.mock("../verify", () => ({verify: jest.requireActual("../verify").verify, setPeriodicVerification: jest.fn}));
+jest.mock("../cycle", () => ({cycle: jest.requireActual("../cycle").cycle, setBackgroundCycling: jest.fn}));
+jest.mock("../seed", () => ({seed: jest.requireActual("../seed").seed, setPeriodicReseeding: jest.fn}));
 
 describe("provably fair rng", () => {
     test("deterministic output", () => {

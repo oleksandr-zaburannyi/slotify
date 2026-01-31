@@ -1,4 +1,166 @@
+# 30.01.2026
+
+```
+"adapter"     = "v3.6.0"
+"back-office" = "v3.3.0"
+"connector"   = "v2.3.0"
+"demo-casino" = "v2.1.0"
+"promo"       = "v2.2.0"
+"rgs"         = "v4.2.0"
+"rng"         = "v4.1.0"
+"websocket"   = "v2.2.0"
+```
+
+```
+"shared" = "v2.2.0"
+"gdk" = "v4.3.0"
+```
+
+For production environments please run the following queries manually BEFORE deployment
+
+```sql
+create index concurrently if not exists "adapter_transaction_cube_playerId_date" on adapter_transaction_cube ("playerId", "date");
+create index concurrently if not exists "rgs_command_drawId_playerId_createdAt" on rgs_command ("drawId", "playerId", "createdAt");
+```
+
+- `[connector]` exposed `fetch` method
+- `[gdk]` fix `state` immutability for player requests with `cheats`
+- `[rgs]` make `currencyDecimals` endpoint player authentication optional
+- `[adapter]` removed `bgn` currency from ecb feed
+- `[promo]` added item prize translations for Prize Drop and Tournament
+- `[back-office]` fix column filters not being sent to GraphQL when changing dimensions/interval/dates in DataTable
+- `[back-office]` added timezone picker to GameWin report
+- `[adapter, promo]` fix free bets getting stuck when wallet returns non-cancellable errors by adding `withdrawFailed` mode
+- `[back-office]` added Player page with player info summary and game win chart
+- `[rgs]` added optional `rgs-multiplayer` service for dedicated tick processing (`RGS_MODE=multiplayer`). Without it, `rgs` handles everything as before.
+- `[adapter]` fixed sending finish free bets finish request for withdrawal in SoftSwiss, Alea, BadHombre and PinUp wallets
+- `[back-office]` fix home page stats (operators, brands, games) showing doubled values across year boundary
+- `[shared]` changed CSV export separator from `;` to `,` while maintaining backward compatibility for importing old format files
+- `[adapter]` fix wallet `responseTime` calculation to exclude queue waiting time
+- `[rgs]` add multiplayer game support to RTP monitoring
+- `[promo, back-office]` added `qualifiedBets` counter to Prize Drop and Tournament campaigns
+- `[promo, back-office]` added per-currency value overrides for Prize Drop and Tournament (qualifying bet, cash prizes, multiplier limits)
+- `[promo, back-office]` added weight property to Prize Drop prizes for probability weighting
+- `[rgs, adapter]` changes to DGE reporting after feedback from regulator
+- `[adapter]` increased timeout for internal GraphQL stitching calls to 120 seconds
+- `[adapter]` fix LnW wallet adapter typo in `toWalletCurrency` method and currency case handling
+- `[adapter]` skip replication lag check in cube aggregation when primary and replica point to the same database instance
+- `[rgs]` added endpoint to retrieve room history
+- `[adapter]` added ability to have multiple providers in Grrr wallet adapter
+- `[adapter]` LNW wallet: recover freeRounds data when player reconnects mid-promotion, set walletCampaignId/campaignType on free rounds transactions
+- `[adapter]` add hot-reload for wallet and RGS adapters (no service restart needed for CRUD operations)
+- `[adapter]` added `currencyAliases` support to Relax, LnW, and Standard wallet adapters; added `currencyAliasesPerBrand` support to QTech wallet adapter with unified priority logic (`currencyAliasesPerBrand` > `currencyAliases`)
+- `[adapter]` added `currencyAliases` and `currencyAliasesPerBrand` support to SoftSwiss and SoftSwiss2 wallet adapters; deprecated `convertCurrencies` in SoftSwiss2 in favor of `currencyAliases`
+- `[shared]` exclude OPTIONS requests from info-level HTTP logs (moved to verbose level)
+- `[infra]` improved reliability of first-time environment deployments
+- `[infra]` increased timeouts for Redis and database provisioning
+- `[infra]` improved documentation for GCP project setup requirements
+- `[adapter]` improved error handling and retries in Slotegrator wallet
+- `[adapter]` added exclusion reason to platform alerts
+- `[back-office]` filter commands and drawWins by playerId on Round page to show only current player's data
+
+# 17.12.2025
+
+```
+"adapter"     = "v3.4.21"
+"back-office" = "v3.2.18"
+"connector"   = "v2.2.10"
+"demo-casino" = "v2.0.12"
+"promo"       = "v2.1.12"
+"rgs"         = "v4.1.19"
+"rng"         = "v4.0.6"
+"websocket"   = "v2.1.10"
+```
+
+```
+"shared" = "v2.1.11"
+"gdk" = "v4.2.4"
+```
+
+For production environments please run the following queries manually BEFORE deployment
+
+```sql
+alter table "adapter_transaction"
+    add column if not exists "walletCampaignId" varchar;
+alter table "adapter_transaction_archive"
+    add column if not exists "walletCampaignId" varchar;
+create index concurrently if not exists "adapter_transaction_walletCampaignId" on adapter_transaction ("walletCampaignId") where "walletCampaignId" is not null;
+
+alter table "rgs_round"
+    add column if not exists "completedAt" timestamptz;
+alter table "rgs_round_archive"
+    add column if not exists "completedAt" timestamptz;
+create index concurrently if not exists "rgs_round_player_started_access" on rgs_round ("playerId", "provider", "game") where status = 'started';
+create index concurrently if not exists "rgs_round_player_failed_access" on rgs_round ("playerId", "provider", "game", "failedAt") where status = 'failed';
+create index concurrently if not exists "rgs_round_player_unpaid_access" on rgs_round ("playerId", "provider", "game", "completedAt") where status = 'unpaid';
+
+create index concurrently if not exists "promo_stream_entry_processed_streamId_id" on promo_stream_entry ("processed", "streamId", "id") where processed = false;
+create index concurrently if not exists "rgs_round_playerId_status_game_id" on rgs_round ("playerId", "status", "game", "id") where status IN ('started', 'unpaid');
+```
+
+- [promo] added wallet, operator, brand to free bets validation
+- [adapter] fix wallet name in Relax free bets campaign
+- [adapter] added possibility to customise `operator` in Reevo wallet
+- [adapter] exposed audit logs retention to optional env variable `AUDIT_LOGS_RETENTION_DAYS`
+- [adapter, promo, rgs, back-office] implement Free Bets API
+- [rgs] fixed `/currencyDecimals` endpoint with custom min/max settings
+- [rng] implement new certified RNG version 4.0 with periodic reseeding and cycling with external entropy
+- [rgs] add `drawId` to multiplier replay responses
+- [rgs] Fixed remote critical files checksums
+- [adapter] added campaign details to SlotifyWallet
+- [rgs] fix for infinite loop in `syncLeftmostBets`
+- [rgs] change `calculateRtps` scheduled task to happen every hour
+- [adapter] changed custom integrations to rely on `campaignData` instead of GraphQL call (fixing potential replica delay issue)
+- [adapter] added an import option for Currency Aliases
+- [websocket, rgs] added IP whitelisting for system messages in Multiplayer
+- [adapter] added `currencyAliases` mapping to Qtech Wallet Adapter
+- [rgs] added `completedAt` and `failedAt` to round for more precise retry expiry
+- [promo] add `currency` param to jackpots campaign feed
+- [adapter, back-office] added the ability to download and specify custom `timestamp` in Report Sender
+- [rgs] fix RTP Monitoring showing outdated statistics for sample size `0`
+- [rgs] make RTP Monitoring send alert emails from sample size `100`
+- [adapter, infra] removed `ipgeolocation.io` Geo IP feed and Cloud Armor country blocking and replaced with native GCP GEO IP functionality
+- [infra] removed `ip-blocked-countries`, `api-blocked-countries` and `geoip-blocked-states` and `ipgeolocation-api-key` from terraform variables
+- [adapter, back-office] added ability to specify blocked countries and regions per wallet (warning: it is not backward compatible, please set up restricted territories using new system)
+- [promo] implement jackpots base currency setting
+- [infra] added option to define list of IPs excluded from rate limiting
+- [adapter] fixed LnW player nativeId suffix and getrounds fetching for same player across different brands
+- [adapter, back-office] added SFTP transport in Report Sender
+- [adapter] added `/availableGames` endpoint to Standard Wallet REST API
+- [adapter] fixed LnW free round popup options translation
+- [adapter] added REST launch endpoint which returns launch URL
+- [adapter] added `hostname` to Standard, Reevo and SoftSwiss2 wallets (used to force specific domain for launcher)
+- [connector] added guard for not emit balance if its undefined (complete with asyncWin)
+- [connector] add websocket close to the websocket api
+- [adapter] added `currencyAliasesPerBrand` mapping to LnW and Standard Wallets
+- [shared] excluding certain paths from metrics to improve memory usage for Prometheus
+- [adapter] Added notification after editing an account
+- [adapter, rgs] Introduced batching to archiving process
+- [rgs, back-office] Ability to pay Draw Wins manually from the Back Office
+- [connector] add deep copy of `_settings` object to proper handling more instances of connector
+- [promo] prioritise campaign `start` time over `createdAt` in player campaigns visibility
+- [rgs, back-office] add `promo` column to rgs Wager
+- [adapter] Fixed `VND` free bets support in SoftSwiss2 Wallet Adapter
+- [adapter] Added support for non-EUR base currency in the ECB feed
+- [adapter, promo] implement DGE_jackpot report for transaction jackpots
+
 # 30.10.2025
+
+```
+"adapter" = "v3.2.0"
+"back-office" = "v3.2.0"
+"connector" = "v2.2.0"
+"demo-casino" = "v2.0.8"
+"promo" = "v2.1.0"
+"rgs" = "v4.1.0"
+"rng" = "v3.0.8"
+"websocket" = "v2.1.6"
+```
+
+```
+"shared" = "v2.0.24"
+"gdk" = "v4.0.10"
+```
 
 For production environments please run the following queries manually BEFORE deployment
 

@@ -111,7 +111,7 @@ _RGS_ needs to deliver three URLs:
 
 Depending on the mode we redirect to configured URL and replace `${x}` parameters with corresponding values so you can potentially fit your own launcher format.
 <br/>If a variable is not defined explicitly with `${x}`, it is appended as querystring (so `https://example.com/real?game=${game}` and https://example.com/real" would both redirect to the same URL).
-For multi-domain support provided url templates might contain `${hostname}` so player gets redirected to the same hostname as `launch` request. 
+For multi-domain support provided url templates might contain `${hostname}` so player gets redirected to the same hostname as `launch` request.
 E.g. `https://cdn-${hostname}/real?game=${game}&server=https://${hostname}` will allow the operator to redirect players to environments with different domains depending on availability (e.g. `example.com`, `example2.com`).
 
 ### Parameters
@@ -182,11 +182,11 @@ Returns _Player's_ current balance in _Player's_ currency.
 
 **Query Parameters**
 
-| Name       | Type     | Required   | Example      | Description          |
-|------------|----------|------------|--------------|----------------------|
-| `playerId` | `string` | `REQUIRED` | `user123432` | _Wallet's_ Player Id |
-| `provider` | `string` | `REQUIRED` | `MyProvider` | _Provider_ Id        |
-| `game`     | `string` | `REQUIRED` | `superSlot`  | Name of the game     |
+| Name       | Type     | Required   | Example      | Description      |
+|------------|----------|------------|--------------|------------------|
+| `playerId` | `string` | `REQUIRED` | `user123432` | Player Id        |
+| `provider` | `string` | `REQUIRED` | `MyProvider` | _Provider_ Id    |
+| `game`     | `string` | `REQUIRED` | `superSlot`  | Name of the game |
 
 **Response**
 
@@ -217,11 +217,12 @@ Withdraws or deposits money from _Player's_ account.
 | `variant`          | `string`      | `OPTIONAL` | `superSlot`                                                                                   | Variant of the game                                                                                                                                                                                                                                                                            |
 | `roundId`          | `string`      | `REQUIRED` | `123e4567-e89b-12d3-a456-426614174000`                                                        | Round Id, one round can have multiple transactions                                                                                                                                                                                                                                             |
 | `roundFinished`    | `boolean`     | `OPTIONAL` | `true`                                                                                        | Indicates whether round has finished                                                                                                                                                                                                                                                           |
-| `category`         | `string`      | `OPTIONAL` | `promo`                                                                                       | Category of transaction: `normal`, `side`, `tip`, `promo`, `jackpot`                                                                                                                                                                                                                           |
+| `category`         | `string`      | `REQUIRED` | `normal`                                                                                      | Category of transaction: `normal`, `side`, `tip`, `promo`, `jackpot`                                                                                                                                                                                                                           |
 | `name`             | `string`      | `OPTIONAL` | `Royal Match`                                                                                 | Name of the transaction                                                                                                                                                                                                                                                                        |
 | `channel`          | `string`      | `OPTIONAL` | `mobile`                                                                                      | Channel of the device: `mobile` or `desktop`                                                                                                                                                                                                                                                   |
 | `campaignType`     | `string`      | `OPTIONAL` | `freeBets`                                                                                    | Type of promotional tool `freeBets`, `prizeDrop`, `mystery` (can be more)                                                                                                                                                                                                                      |
-| `campaignId`       | `string`      | `OPTIONAL` | `myCampaign123`                                                                               | Id of promotional campaign                                                                                                                                                                                                                                                                     |
+| `walletCampaignId` | `string`      | `OPTIONAL` | `wallet-campaign-2025`                                                                        | Wallet Id of promotional campaign - REQUIRED if campaign was registered by the Free Bets API [See Free Bets Transaction](#freebetstransaction)                                                                                                                                                 |
+| `campaignData`     | `object`      | `OPTIONAL` | `{total: 10, used: 3, amount: 2.00, totalWin: 123.23}`                                        | Campaign data [See Free Bets Transaction](#freebetstransaction)                                                                                                                                                                                                                                |
 | `winRatio`         | `number`      | `OPTIONAL` | `123.45`                                                                                      | Win divided by base game bet (only for `deposit`)                                                                                                                                                                                                                                              |
 | `ip`               | `string`      | `OPTIONAL` | `1.2.3.4`                                                                                     | Player IP address                                                                                                                                                                                                                                                                              |
 | `regulatory`       | `IRegulatory` | `OPTIONAL` | `{ pt: { "sm_result": "0:1;3;1;1;1#5;0;7;2;1#5;0;5;2;2#", "descr_ap": "60GoldenCoinsPro" } }` | Regulatory information required only in deposit transactions, currently required for games to go live in Portugal [See IRegulatory](#iregulatory)                                                                                                                                              |
@@ -265,3 +266,136 @@ You need to specify either `rgsTransactionId` to cancel individual transaction o
 | `balance` | `number` | `REQUIRED` | `100.85` | _Player's_ current balance |
 
 ---
+
+## Free Bets API
+
+Free Bets API allows the _Adapter_ to manage promotional **Free Bets** campaigns for players on the external _RGS_.  
+In this case, it's the _Adapter_ who performs HTTP POST calls to the _RGS_.
+All requests `MUST` be authorized with the `secretKey` symmetrically to how _RGS_ secures it's requests (see [Authorization](#authorization)).
+
+### Configuration
+
+In order for _Adapter_ to forward Free Bets API requests to the external _RGS_ the configuration needs to provide `freeBetsUrl`.
+If it's present in Standard RGS Adapter configuration, _Adapter_ will attempt to forward the requests.
+
+Example Free Bets API configuration:
+
+```json
+{
+    "realUrl": "https://example.com/real?gameID=${game}",
+    "funUrl": "https://example.com/fun?gameID=${game}",
+    "replayUrl": "https://example.com/replay?gameID=${game}&roundID=${roundId}",
+    "secretKey": "example-external-rgs-secret",
+    "freeBetsUrl": "https://example.com"
+}
+```
+
+### Add Free Bets
+
+**Path**:`/freeBets/add`  
+**Method**:`POST`  
+**Authorization**:`X-Server-Authorization`  
+**Idempotent**:`NO`
+
+Assigns a number of free bets to one or multiple Players for one or multiple games.
+
+**Body**
+
+| Name               | Type       | Required   | Example                     | Description                                                        |
+|--------------------|------------|------------|-----------------------------|--------------------------------------------------------------------|
+| `walletCampaignId` | `string`   | `REQUIRED` | `wallet-campaign-2025`      | Wallet's identifier of the Free Bets campaign within the _Wallet_. |
+| `games`            | `string[]` | `REQUIRED` | `["superSlot", "megaSpin"]` | List of game identifiers to which free bets apply.                 |
+| `nativeIds`        | `string[]` | `REQUIRED` | `["user123", "user456"]`    | List of _Wallet's_ Player Ids to receive the free bets.            |
+| `start`            | `integer`  | `OPTIONAL` | `1730400000`                | Start time of campaign in **Unix timestamp (milliseconds)**.       |
+| `end`              | `integer`  | `OPTIONAL` | `1733000000`                | End time of campaign in **Unix timestamp (milliseconds)**.         |
+| `bets`             | `integer`  | `REQUIRED` | `10`                        | Number of free bets granted to each player.                        |
+| `amount`           | `number`   | `REQUIRED` | `1.00`                      | Amount per single free bet in player's currency.                   |
+| `currency`         | `string`   | `REQUIRED` | `eur`                       | Currency code (lowercase).                                         |
+| `operator`         | `string`   | `REQUIRED` | `my-operator`               | Players' operator.                                                 |
+| `brand`            | `string`   | `REQUIRED` | `my-brand`                  | Players' brand.                                                    |
+
+**Response**
+
+Returns confirmation object from RGS Adapter indicating successful creation.
+
+```json
+{
+    "success": true
+}
+```
+
+### Remove Free Bets
+
+**Path**:`/freeBets/remove`  
+**Method**:`POST`  
+**Authorization**:`X-Server-Authorization`  
+**Idempotent**:`NO`
+
+Removes or deactivates Free Bets campaign for given walletCampaignId.
+
+**Body**
+
+| Name               | Type       | Required   | Example                     | Description                                                                              |
+|--------------------|------------|------------|-----------------------------|------------------------------------------------------------------------------------------|
+| `walletCampaignId` | `string`   | `REQUIRED` | `wallet-campaign-2025`      | Wallet's identifier of the Free Bets campaign to remove.                                 |
+| `games`            | `string[]` | `REQUIRED` | `["superSlot", "megaSpin"]` | List of games that the campaign was added for (required to locate the campaign in Rgss). |
+| `operator`         | `string`   | `REQUIRED` | `my-operator`               | Players' operator.                                                                       |
+| `brand`            | `string`   | `REQUIRED` | `my-brand`                  | Players' brand.                                                                          |
+
+**Response**
+
+```json
+{
+    "success": true
+}
+```
+
+### Available Bets
+
+**Path**:`/freeBets/availableBets`  
+**Method**:`POST`  
+**Authorization**:`X-Server-Authorization`  
+**Idempotent**:`NO`
+
+Retrieves available Free Bets for given games and currencies.
+
+**Body**
+
+| Name         | Type       | Required   | Example                     | Description                         |
+|--------------|------------|------------|-----------------------------|-------------------------------------|
+| `games`      | `string[]` | `REQUIRED` | `["superSlot", "megaSpin"]` | List of game identifiers.           |
+| `currencies` | `string[]` | `REQUIRED` | `["eur""]`                  | List of currency codes (lowercase). |
+| `operator`   | `string`   | `REQUIRED` | `my-operator`               | Players' operator.                  |
+| `brand`      | `string`   | `REQUIRED` | `my-brand`                  | Players' brand.                     |
+
+**Response**
+
+```json
+{
+    "superSlot": {
+        "eur": [
+            0.1,
+            1,
+            10
+        ]
+    },
+    "megaSpin": {
+        "eur": [
+            0.2,
+            2,
+            20
+        ]
+    }
+}
+```
+
+### Free Bets Transaction
+
+If campaign is registered via Free Bets API, it is `REQUIRED` that transactions include `walletCampaingId`, `campaignType=freeBets` and `campaignData` in the following format:
+
+| Name       | Type     |            | Example | Description                                                                                                                           |
+|------------|----------|------------|---------|---------------------------------------------------------------------------------------------------------------------------------------|
+| `total`    | `number` | `REQUIRED` | 10      | Total amount of bets registered in this campaign (equal to Free Bets campaign config `bets`)                                          |
+| `used`     | `string` | `REQUIRED` | 3       | Amount of Free Bets used by the player - decrements during the Withdraw transaction                                                   |
+| `amount`   | `string` | `REQUIRED` | 2       | Bet amount configured for the given campaign (it has to be equal to Withdraw transaction `amount` and to configured campaign `amount` |
+| `totalWin` | `string` | `REQUIRED` | 123.23  | Free Bets campaign accumulated win - increases on Deposit transactions                                                                |

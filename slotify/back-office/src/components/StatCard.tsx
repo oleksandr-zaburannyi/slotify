@@ -30,7 +30,7 @@ const StatCard = ({type, title, dimension, icon, color}: IStatCard) => {
                 {type: "EQUAL", field: "excluded", value: false},
             ],
             limit: 100 * 1000,
-            options: {convert: true, interval: "year", dimensions: [dimension]},
+            options: {convert: true, dimensions: [dimension]},
         }),
         [],
     );

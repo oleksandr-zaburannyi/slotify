@@ -1,5 +1,5 @@
 import IWalletAdapter, {IWalletAuthenticate, IWalletBalance, IWalletTransaction} from "./IWalletAdapter";
-import {Express, Request} from "express";
+import {Router, Request} from "express";
 import Exception from "@slotify/shared/lib/Exception";
 import logger from "@slotify/shared/lib/logger";
 import fetch from "@slotify/shared/lib/fetch";
@@ -11,7 +11,7 @@ import {clearEmpty} from "@slotify/shared/lib/clearEmpty";
 import {errorCodes} from "./walletAdapter";
 import * as crypto from "crypto";
 import {Game} from "../db/model/Game";
-import {cancelCampaign, createCampaign, getCampaignByName, getFreeBetsCampaignDetails, getFreeBetsPlayerDetails} from "../util/external";
+import {cancelCampaign, createCampaign, getCampaignByName, getFreeBetsCampaignDetails} from "../util/external";
 import {v4} from "uuid";
 
 type ILauncherQueryParams = {
@@ -68,7 +68,8 @@ type CancelFreeSpinsBodyParams = IActionBodyParams & {
 
 export type IConfig = {
     brands: Record<string, {url: string; secretKey: string}>;
-    providerPartnerId: string;
+    providerPartnerId?: string;
+    providerPartnerIds?: Record<string, string>;
     thumbnailUrl: string;
     timeout?: number;
 };
@@ -82,12 +83,19 @@ export class GrrrWalletAdapter implements IWalletAdapter {
     config!: IConfig;
     cipher!: Cipher;
 
-    async init(wallet: string, api: Express, path: string, config: IConfig) {
+    private getProviderPartnerId(provider: string | undefined) {
+        if (!provider) return this.config.providerPartnerId;
+        if (!this.config.providerPartnerIds) return this.config.providerPartnerId;
+        if (!this.config.providerPartnerIds[provider]) return this.config.providerPartnerId;
+        return this.config.providerPartnerIds[provider];
+    }
+
+    async init(wallet: string, router: Router, config: IConfig) {
         this.wallet = wallet;
         this.config = config;
         this.cipher = new Cipher(Object.values(this.config.brands || {})[0]?.secretKey || this.wallet, this.wallet);
 
-        api.get(path + "/launcher", async (req: Request<unknown, unknown, unknown, ILauncherQueryParams>, res: any) => {
+        router.get("/launcher", async (req: Request<unknown, unknown, unknown, ILauncherQueryParams>, res: any) => {
             const partnerId = req.query.partnerId; // brand
             const game = req.query.gameId;
             const token = req.query.token;
@@ -126,7 +134,7 @@ export class GrrrWalletAdapter implements IWalletAdapter {
             res.redirect(launchUrl);
         });
 
-        api.get(path + "/api", async (req: Request<unknown, unknown, unknown, IApiQueryParams>, res: any) => {
+        router.get("/api", async (req: Request<unknown, unknown, unknown, IApiQueryParams>, res: any) => {
             if (req.query.action === "gameList") {
                 const games = await this.getAllGames();
                 res.json(games);
@@ -135,7 +143,7 @@ export class GrrrWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/action", async (req: Request<unknown, unknown, IActionBodyParams, unknown>, res: any) => {
+        router.post("/action", async (req: Request<unknown, unknown, IActionBodyParams, unknown>, res: any) => {
             if (req.body.action === "activateFreeSpin") {
                 try {
                     await this.createFreeBets(req.body as CreateFreeSpinsBodyParams);
@@ -152,7 +160,7 @@ export class GrrrWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/api", async (req: Request<unknown, unknown, IActionBodyParams, unknown>, res: any) => {
+        router.post("/api", async (req: Request<unknown, unknown, IActionBodyParams, unknown>, res: any) => {
             if (req.body.action === "cancelFreeSpin") {
                 try {
                     await this.closeFreeBetsCampaign(req.body as CancelFreeSpinsBodyParams);
@@ -169,11 +177,11 @@ export class GrrrWalletAdapter implements IWalletAdapter {
         });
     }
 
-    async authenticate(encryptedUrlKey: string): Promise<IWalletAuthenticate> {
+    async authenticate(encryptedUrlKey: string, key: string, operator: string, provider: string): Promise<IWalletAuthenticate> {
         const {partnerId, token: decryptedToken} = JSON.parse(this.cipher.decrypt(encryptedUrlKey));
 
         const initPayload = {
-            partnerId: this.config.providerPartnerId,
+            partnerId: this.getProviderPartnerId(provider),
             token: decryptedToken,
             action: "init",
         };
@@ -191,27 +199,26 @@ export class GrrrWalletAdapter implements IWalletAdapter {
 
     async transaction(player: Player, transaction: IWalletTransaction): Promise<IWalletBalance> {
         if (transaction.campaignType === "freeBets") {
-            const campaignPlayerDetails = await getFreeBetsPlayerDetails(transaction.campaignId!, player.id);
-            if (campaignPlayerDetails?.finished) {
+            if (transaction.type === "deposit" && transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) {
                     throw new Exception("Couldn't find campaign name");
                 }
                 const freeSpinPayload = {
-                    partnerId: this.config.providerPartnerId,
+                    partnerId: this.getProviderPartnerId(transaction.provider),
                     action: "freeSpin",
                     freeSpinId: campaign.name.replace(`${this.wallet}_`, ""), // format of campaign name is "{wallet_name}_{freeSpinId}"
-                    amount: campaignPlayerDetails.state.totalWin.toString(),
+                    amount: transaction.campaignData!.totalWin.toString(),
                 };
 
                 const {balance} = await this.fetch("action", player.brand!, freeSpinPayload);
                 return {balance: parseFloat(balance)};
             } else {
-                return this.balance(player);
+                return this.balance(player, transaction.provider!);
             }
         } else {
             const transactionPayload: any = {
-                partnerId: this.config.providerPartnerId,
+                partnerId: this.getProviderPartnerId(transaction.provider),
                 action: transaction.type === "withdraw" ? "stake" : "win",
                 gameId: transaction.game,
                 playerId: player.nativeId,
@@ -229,7 +236,7 @@ export class GrrrWalletAdapter implements IWalletAdapter {
 
     async cancel(player: Player, transaction: IWalletTransaction): Promise<IWalletBalance> {
         const transactionPayload = {
-            partnerId: this.config.providerPartnerId,
+            partnerId: this.getProviderPartnerId(transaction.provider),
             action: "rollback",
             originalTransactionId: transaction.transactionId,
             transactionId: v4(),
@@ -239,9 +246,9 @@ export class GrrrWalletAdapter implements IWalletAdapter {
         return {balance: parseFloat(balance)};
     }
 
-    async balance(player: Player): Promise<IWalletBalance> {
+    async balance(player: Player, provider: string): Promise<IWalletBalance> {
         const transactionPayload = {
-            partnerId: this.config.providerPartnerId,
+            partnerId: this.getProviderPartnerId(provider),
             action: "balance",
             playerId: player.nativeId,
         };

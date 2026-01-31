@@ -13,6 +13,8 @@ import {unsheduleTask} from "@slotify/shared/lib/scheduler";
 import {promoPlay} from "../util/promoUtil";
 import {IPlayer} from "./authenticate";
 
+const autocompletionStepsLimit = process.env.AUTOCOMPLETION_STEPS_LIMIT ? parseInt(process.env.AUTOCOMPLETION_STEPS_LIMIT) : 1000;
+
 export async function autoCompleteRound(roundId: string) {
     const round = await Round.getWithWagers(roundId);
     if (!round) throw new Exception("Couldn't find round to auto complete");
@@ -62,7 +64,7 @@ export async function autoPlay(round: Round, player: Omit<IPlayer, "sessionId">)
         }
 
         while (wager.next && wager.next.length > 0) {
-            if (step > 100) {
+            if (step > autocompletionStepsLimit) {
                 logger.error("Round autocompletion exceeds steps limit signifying game server malfunction", {roundId, game, provider, wager, firstWager});
                 break;
             }

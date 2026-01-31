@@ -1,4 +1,4 @@
-export function unbiasedRandomInteger(limit: number, random: () => number) {
+export function unbiasedRandomInteger(limit: number, randomInt32: () => number): number {
     let power = 1;
     while (power < limit) {
         power *= 2;
@@ -6,7 +6,7 @@ export function unbiasedRandomInteger(limit: number, random: () => number) {
 
     let number;
     do {
-        const int = random();
+        const int = randomInt32();
         number = int % power;
     } while (number >= limit);
 

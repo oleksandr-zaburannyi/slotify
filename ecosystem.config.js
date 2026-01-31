@@ -30,6 +30,25 @@ let envs = {
 
 const gameServices = [
     {
+        name: "trading",
+        cwd: "../trading-game-servers",
+        port: 8093,
+        envs: {
+            FEEDS_CONFIG: [
+                {feed: "bitfinex", currencies: ["BTC", "ETH"]},
+                //{feed: "bitstamp", currencies: ["BTC", "ETH"]},
+                {feed: "binance", currencies: ["BTC", "ETH"]},
+                {feed: "bybit", currencies: ["BTC", "ETH"]},
+                {feed: "coinbase", currencies: ["BTC", "ETH"]},
+                //{feed: "gate", currencies: ["BTC", "ETH"]},
+                {feed: "htx", currencies: ["BTC", "ETH"]},
+                {feed: "kraken", currencies: ["BTC", "ETH"]},
+                {feed: "kucoin", currencies: ["BTC", "ETH"]},
+                {feed: "okx", currencies: ["BTC", "ETH"]},
+            ]
+        }
+    },
+    {
         name: "example-provider",
         cwd: "../example-game-servers",
         port: 8092,
@@ -43,7 +62,7 @@ const gameServices = [
         name: "tequity",
         cwd: "../tequity-game-servers",
         port: 8090,
-    }
+    },
 ];
 
 

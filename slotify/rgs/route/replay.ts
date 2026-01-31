@@ -27,7 +27,7 @@ export default async function replay(roundId: string) {
 
     const draw = await Draw.findOneBy({drawId: roundId, finished: true});
     if (draw) {
-        const {state, roomId} = draw;
+        const {state, roomId, drawId} = draw;
         const room = await Room.getByIdOrFail(roomId);
         const drawData = await fetchAndParse(`${await gamesService(room.provider, room.game)}/api/multiplayer/${room.game}/replay`, {
             method: "POST",
@@ -35,7 +35,7 @@ export default async function replay(roundId: string) {
             body: JSON.stringify({state}),
         });
 
-        return {draw: drawData};
+        return {draw: drawData, drawId, roomId};
     }
 
     const commands = await Command.findBy({roundId, withdrawalStatus: "finished"});
@@ -54,7 +54,15 @@ export default async function replay(roundId: string) {
 
         const win = drawWins.reduce((sum: number, drawWin) => sum + drawWin.amount, 0);
         const bet = commands.reduce((sum: number, command) => sum + (command.bet || 0), 0);
-        return {bet, win: floor(win, decimals), draw: drawData, createdAt, ...(await replayData(roundId, playerId, room.provider!, room.game))};
+        return {
+            bet,
+            win: floor(win, decimals),
+            drawId,
+            roomId,
+            draw: drawData,
+            createdAt,
+            ...(await replayData(roundId, playerId, room.provider!, room.game)),
+        };
     }
 
     throw new Exception("Couldn't find roundId to replay", {data: {roundId}});

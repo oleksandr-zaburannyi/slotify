@@ -380,7 +380,6 @@ describe("grrr wallet adapter", () => {
         async () => {
             const authenticateResponse = await authenticateRequest();
 
-            queueMockFetchResponse({data: {campaignPlayers: {items: [{finished: true, state: {totalWin: 5}}]}}});
             queueMockFetchResponse({data: {campaigns: {items: [{name: "grrr-wallet_10230190312"}]}}});
             queueMockFetchResponse({balance: 2005});
 
@@ -395,6 +394,7 @@ describe("grrr wallet adapter", () => {
                 category: "promo",
                 campaignType: "freeBets",
                 campaignId: "7818349123",
+                campaignData: {used: 2, total: 2, totalWin: 5},
             };
             const response = await request(api).put("/rgs/test-rgs/transaction").set(rgsHeader(freeBetsParams)).send(freeBetsParams).expect(200);
 
@@ -402,7 +402,7 @@ describe("grrr wallet adapter", () => {
                 balance: 2005,
             });
 
-            expect(JSON.parse(mockedFetch.mock.calls[3][1]?.body as string)).toEqual({
+            expect(JSON.parse(mockedFetch.mock.calls[2][1]?.body as string)).toEqual({
                 partnerId: "shadylady",
                 action: "freeSpin",
                 freeSpinId: "10230190312",
@@ -417,7 +417,6 @@ describe("grrr wallet adapter", () => {
         async () => {
             const authenticateResponse = await authenticateRequest();
 
-            queueMockFetchResponse({data: {campaignPlayers: {items: [{finished: false, state: {totalWin: 5}}]}}});
             queueMockFetchResponse({balance: 2000});
 
             const freeBetsParams = {
@@ -431,6 +430,7 @@ describe("grrr wallet adapter", () => {
                 category: "promo",
                 campaignType: "freeBets",
                 campaignId: "7818349123",
+                campaignData: {used: 1, total: 2, totalWin: 1000},
             };
             const response = await request(api).put("/rgs/test-rgs/transaction").set(rgsHeader(freeBetsParams)).send(freeBetsParams).expect(200);
 
@@ -438,7 +438,7 @@ describe("grrr wallet adapter", () => {
                 balance: 2000,
             });
 
-            expect(JSON.parse(mockedFetch.mock.calls[2][1]?.body as string)).toEqual({
+            expect(JSON.parse(mockedFetch.mock.calls[1][1]?.body as string)).toEqual({
                 partnerId: "shadylady",
                 action: "balance",
                 playerId: authenticateResponse.body.nativeId,

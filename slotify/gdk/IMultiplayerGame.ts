@@ -5,6 +5,7 @@ import {IRandomizationBuilder} from "@slotify/rng/lib/random/createProofBuilder"
 
 export interface IInitRequest {
     time: number;
+    roomId: string;
     config: any;
 }
 
@@ -23,7 +24,8 @@ export interface ICommandData<TParams> {
     data?: {nickname?: string; betLimits?: IBetLimits};
 }
 
-export interface ICommandRequest<TState, TParams> extends ICommandData<TParams> {
+export interface ICommandRequest<TState, TParams, TConfig> extends ICommandData<TParams> {
+    config: TConfig;
     state: TState;
     betLimits?: IBetLimits;
 }
@@ -55,8 +57,9 @@ export interface ICommandResponse {
     message?: any;
 }
 
-export interface ITickRequest<TState, TParams, TSystemParams> {
+export interface ITickRequest<TState, TParams, TConfig, TSystemParams> {
     time: number;
+    config: TConfig;
     state: TState;
     commands: ICommand<TParams>[];
     drawId: string;
@@ -75,7 +78,7 @@ export interface ITickResponse<TState> {
     };
 }
 
-export type ITick<TState = any, TParams = any, TSystemParams = any> = ITickRequest<TState, TParams, TSystemParams> & ITickResponse<TState>;
+export type ITick<TState = any, TParams = any, TConfig = any, TSystemParams = any> = ITickRequest<TState, TParams, TConfig, TSystemParams> & ITickResponse<TState>;
 
 export interface IConnectedRequest<TState> {
     time: number;
@@ -109,9 +112,9 @@ export interface IMultiplayerGame<TState = any, TParams = any, TConfig = any, TS
 
     systemCommand?(request: ISystemCommandRequest<TState, TSystemParams>): Omit<ICommandResponse, "roundId">;
 
-    command(request: ICommandRequest<TState, TParams>): ICommandResponse;
+    command(request: ICommandRequest<TState, TParams, TConfig>): ICommandResponse;
 
-    tick(request: ITickRequest<TState, TParams, TSystemParams>, random: IRandom): Promise<ITickResponse<TState>>;
+    tick(request: ITickRequest<TState, TParams, TConfig, TSystemParams>, random: IRandom): Promise<ITickResponse<TState>>;
 
     replay(state: TState, playerId?: string): any;
 

@@ -1,9 +1,9 @@
 import {ExecutionResult, GraphQLSchema, OperationDefinitionNode} from "graphql";
 import {AuditLog} from "../db/model/AuditLog";
 import {Request} from "express";
-import {anonymiseIp, checkIPWhitelisting} from "../util/ip";
+import {anonymiseIp} from "../util/ip";
 import {Account} from "../db/model/Account";
-import {getIp} from "@slotify/shared/lib/ip";
+import {checkIPWhitelisting, getIp} from "@slotify/shared/lib/ip";
 import {OperationArgs} from "graphql-http";
 import {FieldNode} from "graphql/language/ast";
 

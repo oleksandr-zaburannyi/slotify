@@ -21,13 +21,15 @@ export default async function authenticate(
     game: string,
     channel: string | undefined,
     ip: string,
-    ipBlockedCountryHeader?: string,
+    ipCountry?: string,
+    ipRegion?: string,
 ): Promise<{token: string; balance: number; currency: string; currencyDecimals: number; currencySymbol: string; sessionData?: any; jurisdiction?: string; playerId: string; nickname?: string; popups?: IExceptionPopup[]}> {
     const body = JSON.stringify({wallet, operator, key, provider, game, ip, channel});
     const headers = clearEmpty({
         "Content-Type": "application/json",
         "X-Server-Authorization": crypto.createHmac("sha256", process.env.ADAPTER_RGS_KEY!).update(body).digest("hex"),
-        "ip-blocked-country": ipBlockedCountryHeader,
+        "X-IP-Country": ipCountry,
+        "X-IP-Region": ipRegion,
     });
     const url = `${getServiceUrl("adapter")}/rgs/${process.env.RGS}/authenticate`;
     const response = await fetchAndParse(url, {method: "POST", body, headers, timeout: 30 * 1000});
@@ -49,7 +51,7 @@ export default async function authenticate(
 
 async function retryPendingTransactions(settingsFilter: ISettingsFilter, balance: number, player: IPlayer, provider: string, game: string, channel: string | undefined, ip: string) {
     const retryExpired = await Settings.getRetryExpired(settingsFilter);
-    for (const round of await Round.getStartedFromUser(["unpaid"], player.playerId, provider, game, retryExpired)) {
+    for (const round of await Round.getUnpaidFromUser(player.playerId, provider, game, retryExpired)) {
         try {
             const res = await complete(player, round.roundId, true, channel, ip, true, null);
             if (res?.balance != null) balance = res.balance;
@@ -61,7 +63,7 @@ async function retryPendingTransactions(settingsFilter: ISettingsFilter, balance
             }
         }
     }
-    for (const round of await Round.getStartedFromUser(["failed"], player.playerId, provider, game, retryExpired)) {
+    for (const round of await Round.getFailedFromUser(player.playerId, provider, game, retryExpired)) {
         try {
             const res = await cancelRound(settingsFilter, round.roundId, false, null);
             if (res?.balance != null) balance = res.balance;

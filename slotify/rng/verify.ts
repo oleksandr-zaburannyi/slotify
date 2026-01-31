@@ -81,7 +81,7 @@ function checkFailure(counter: number[]): void {
 
 const toInt = Math.pow(2, 32);
 
-function verify(number: number): void {
+export function verify(number: number): void {
     if (!addSample(number * toInt)) {
         if (!alertSent) {
             alertSent = true;
@@ -91,22 +91,14 @@ function verify(number: number): void {
     }
 }
 
-function setPeriodicVerification(randFunction: () => number, interval: number): void {
+// default 10 minutes
+const verificationInterval = process.env.RNG_VERIFICATION_INTERVAL ? parseFloat(process.env.RNG_VERIFICATION_INTERVAL) : 10 * 60 * 1000;
+
+export function setPeriodicVerification(randFunction: () => number): void {
     setInterval(() => {
         const toAdd = N - numSamples;
         for (let i = 0; i < toAdd; i++) {
             verify(randFunction());
         }
-    }, interval);
+    }, verificationInterval);
 }
-
-function setBackgroundCycling(randFunction: () => number, interval: number): void {
-    setInterval(() => {
-        const n = Math.floor(randFunction() * 100) + 1; // range <1, 100>
-        for (let i = 0; i < n; i++) {
-            randFunction();
-        }
-    }, interval);
-}
-
-export {verify, setPeriodicVerification, setBackgroundCycling};

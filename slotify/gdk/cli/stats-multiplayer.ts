@@ -6,6 +6,7 @@ import {mockBetLimits} from "../helper/mockBetLimits";
 
 type InitData = {
     strategy?: string;
+    config: any;
     state: any;
     time: number;
     nextTime: number;
@@ -30,14 +31,16 @@ simulator<IMultiplayerGame, ITick, IRunData, InitData>(
         };
     },
     async (env, game) => {
+        const roomId = v4();
         const config = game.simulator?.config && game.simulator.config(env.strategy!);
         const time = Date.now();
-        const initResult = await game.init({time, config}, createRandom());
+        const initResult = await game.init({time, roomId, config}, createRandom());
         const nextTime = initResult.nextTickTime;
         const state = initResult.state;
         return {
             commandLagProbability: parseInt(env.lag || "0") / 100,
             time,
+            config,
             state,
             nextTime,
             strategy: env.strategy,
@@ -45,6 +48,7 @@ simulator<IMultiplayerGame, ITick, IRunData, InitData>(
     },
     true,
     async (initData, runData, game) => {
+        const config = initData.config;
         let state = runData?.state || initData.state;
         let time = runData?.time || initData.time;
         let nextTime = runData?.nextTime || initData.nextTime;
@@ -72,7 +76,7 @@ simulator<IMultiplayerGame, ITick, IRunData, InitData>(
             }
             if (!scheduleInstant) time = nextTime;
 
-            const tickRequest = {time, state, commands, drawId};
+            const tickRequest = {time, config, state, commands, drawId};
             const tickResult = await game.tick(tickRequest, createRandom());
             nextTime = tickResult.nextTickTime;
             state = tickResult.state;

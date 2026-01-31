@@ -5,11 +5,12 @@ import {getServiceUrl} from "@slotify/shared/lib/urls";
 
 export const baseCurrency = process.env.BASE_CURRENCY!;
 
-export async function getCurrencyRate(currency: string) {
+export async function getCurrencyRate(currencyFrom: string, currencyTo: string = baseCurrency) {
     const currencies = await getCurrencies();
-    const item = currencies.find(item => item.currency === currency);
-    if (!item) throw new Exception("Couldn't find currency conversion ratio");
-    return item.rate;
+    const from = currencies.find(item => item.currency === currencyFrom);
+    const to = currencies.find(item => item.currency === currencyTo);
+    if (!from || !to) throw new Exception("Couldn't find currency conversion ratio", {data: {from, to}});
+    return from.rate / to.rate;
 }
 
 export const getCurrencies = cache(

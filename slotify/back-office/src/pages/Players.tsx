@@ -1,4 +1,5 @@
 import React, {useRef} from "react";
+import {Link} from "react-router-dom";
 import {DataTable, tableFilter} from "../components/DataTable";
 import {Button, Form, Input, Select, Tag} from "antd";
 import {PlayCircleOutlined} from "@ant-design/icons";
@@ -37,7 +38,7 @@ const Players = () => {
 
     const columns: any[] = [
         {title: "Created at", dataIndex: "createdAt", render: (createdAt: string) => new Date(createdAt).toLocaleString(), sorter: true, ...tableFilter("TIME")},
-        {title: "Player Id", dataIndex: "playerId", sorter: true, ...tableFilter("EQUAL")},
+        {title: "Player Id", dataIndex: "playerId", render: (playerId: string) => <Link to={`/players/${playerId}`}>{playerId}</Link>, sorter: true, ...tableFilter("EQUAL")},
         {title: "Native Id", dataIndex: "nativeId", sorter: true, ...tableFilter("STARTS_WITH")},
         {title: "Nickname", dataIndex: "nickname", sorter: true, ...tableFilter("LIKE")},
         {title: "Currency", dataIndex: "currency", sorter: true, ...tableFilter("LIKE")},
@@ -48,7 +49,16 @@ const Players = () => {
         {title: "Country", dataIndex: "country", sorter: true, ...tableFilter("LIKE")},
         {title: "Jurisdiction", dataIndex: "jurisdiction", sorter: true, ...tableFilter("LIKE")},
         {title: "Group", dataIndex: "group", sorter: true, ...tableFilter("LIKE")},
-        {title: "Blocked", dataIndex: "blocked", sorter: true, render: (value: boolean) => (value ? <Tag color="red">BLOCKED</Tag> : "")},
+        {
+            title: "Blocked",
+            dataIndex: "blocked",
+            sorter: true,
+            render: (value: boolean) => (value ? <Tag color="red">BLOCKED</Tag> : ""),
+            ...tableFilter("IN", [
+                {name: "true", value: true},
+                {name: "false", value: false},
+            ]),
+        },
         {
             title: "Actions",
             render: ({blocked, playerId, group}: {blocked?: boolean; playerId: string; group?: string}) =>

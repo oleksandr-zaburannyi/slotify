@@ -1,4 +1,4 @@
-import {Express, Request, Response} from "express";
+import {Router, Request, Response} from "express";
 import * as xml2js from "xml2js";
 import {v4} from "uuid";
 import fetch from "@slotify/shared/lib/fetch";
@@ -29,6 +29,8 @@ type IConfig = {
     creditApiClientId: string;
     creditApiClientSecret: string;
     ogsGameIdsMapping: Record<string, string>;
+    currencyAliases?: Record<string, string>;
+    currencyAliasesPerBrand?: Record<string, Record<string, string>>;
 };
 
 type IDevice = "desktop" | "mobile";
@@ -293,7 +295,7 @@ type IInfinityChecksumRequest = {
     password: string;
     opid: string;
     jurisdiction: string;
-    algorithmttype: "NGI_SHA1" | "NGI_SHA256";
+    algorithmtype: "NGI_SHA1" | "NGI_SHA256";
 };
 
 type IInfinityChecksumResponse = {
@@ -359,12 +361,40 @@ export class LnwWalletAdapter implements IWalletAdapter {
     config!: IConfig;
     cipher!: Cipher;
 
-    async init(wallet: string, api: Express, path: string, config: any) {
+    private fromWalletCurrency(walletCurrency: string, brand?: string): string {
+        if (brand && this.config.currencyAliasesPerBrand?.[walletCurrency]?.[brand]) {
+            return this.config.currencyAliasesPerBrand[walletCurrency][brand];
+        }
+        if (this.config.currencyAliases?.[walletCurrency]) {
+            return this.config.currencyAliases[walletCurrency];
+        }
+        return walletCurrency;
+    }
+
+    private toWalletCurrency(currency: string, brand?: string): string {
+        if (this.config.currencyAliasesPerBrand && brand) {
+            for (const [walletCurrency, aliasesPerBrand] of Object.entries(this.config.currencyAliasesPerBrand)) {
+                if (aliasesPerBrand[brand] === currency) {
+                    return walletCurrency;
+                }
+            }
+        }
+        if (this.config.currencyAliases) {
+            for (const [walletCurrency, alias] of Object.entries(this.config.currencyAliases)) {
+                if (alias === currency) {
+                    return walletCurrency;
+                }
+            }
+        }
+        return currency;
+    }
+
+    async init(wallet: string, router: Router, config: any) {
         this.wallet = wallet;
         this.config = config;
         this.cipher = new Cipher(this.config.username + ":" + this.config.password, this.wallet);
 
-        api.get(`${path}/service-api`, async (req: Request, res: Response) => {
+        router.get("/service-api", async (req: Request, res: Response) => {
             try {
                 const queryParams = req.query as IServiceAPIParams;
                 const {request, loginname: username, password} = queryParams;
@@ -400,14 +430,14 @@ export class LnwWalletAdapter implements IWalletAdapter {
                     const roundDetails: IRoundHistoryResponse[] = [
                         {
                             $: {id: result.roundIdBigInt, created: result.createdAt.toISOString()},
-                            ACCOUNTID: result.playerId,
+                            ACCOUNTID: this.stripNativeIdSuffix(result.playerId),
                             OPID: result.brand,
                             GAMENAME: result.gameTitle ?? result.game,
                             GPGAMEID: result.game,
                             GAMESTATUS: result.gameStatus,
                             TOTALBET: result.totalBet,
                             TOTALWIN: result.totalWin,
-                            CURRENCY: result.currency.toUpperCase(),
+                            CURRENCY: this.toWalletCurrency(result.currency, result.brand).toUpperCase(),
                             GAMEDATA: {
                                 $: {format: "external"},
                                 _: await launch("replay", {roundId, language: "en", operator: result.brand, game: result.game}, req),
@@ -434,36 +464,48 @@ export class LnwWalletAdapter implements IWalletAdapter {
                     }
 
                     const roundsLimit = 100;
-                    const {accountid: playerId, start, gpgameid: game, opids} = queryParams;
+                    const {accountid: nativeId, start, gpgameid: game, opids} = queryParams;
                     const operatorIds = opids.split(",");
-                    const results = await this.getPlayerRoundsHistory(playerId, start, operatorIds, game, roundsLimit);
+                    const roundsDetails: IRoundHistoryResponse[] = [];
+                    let limited = false;
 
-                    if (!results) {
-                        res.send(builder.buildObject({...response, ROUNDS: {}}));
-                        return;
+                    for (const brand of operatorIds) {
+                        const playerId = `${nativeId}_${brand}`;
+                        const results = await this.getPlayerRoundsHistory(playerId, start, [brand], game, roundsLimit);
+
+                        if (!results || results.length === 0) {
+                            continue;
+                        }
+
+                        if (results.length > roundsLimit) {
+                            limited = true;
+                        }
+
+                        const playerRounds = results.slice(0, roundsLimit);
+                        const brandRounds: IRoundHistoryResponse[] = await Promise.all(
+                            playerRounds.map(async round => ({
+                                $: {id: round.roundIdBigInt, created: round.createdAt.toISOString()},
+                                ACCOUNTID: this.stripNativeIdSuffix(round.playerId),
+                                OPID: round.brand,
+                                GAMENAME: round.gameTitle ?? round.game,
+                                GPGAMEID: round.game,
+                                GAMESTATUS: round.gameStatus,
+                                TOTALBET: round.totalBet,
+                                TOTALWIN: round.totalWin,
+                                CURRENCY: this.toWalletCurrency(round.currency, round.brand).toUpperCase(),
+                                GAMEDATA: {
+                                    $: {format: "external"},
+                                    _: await launch("replay", {roundId: round.roundId, language: "en", operator: round.brand, game: round.game}, req),
+                                },
+                            })),
+                        );
+
+                        roundsDetails.push(...brandRounds);
                     }
-
-                    const roundsDetails: IRoundHistoryResponse[] = await Promise.all(
-                        results.map(async round => ({
-                            $: {id: round.roundIdBigInt, created: round.createdAt.toISOString()},
-                            ACCOUNTID: round.playerId,
-                            OPID: round.brand,
-                            GAMENAME: round.gameTitle ?? round.game,
-                            GPGAMEID: round.game,
-                            GAMESTATUS: round.gameStatus,
-                            TOTALBET: round.totalBet,
-                            TOTALWIN: round.totalWin,
-                            CURRENCY: round.currency.toUpperCase(),
-                            GAMEDATA: {
-                                $: {format: "external"},
-                                _: await launch("replay", {roundId: round.roundId, language: "en", operator: round.brand, game: round.game}, req),
-                            },
-                        })),
-                    );
 
                     const rounds: IRoundsHistoryResponse = {
                         ROUNDS: {
-                            $: roundsDetails.length > roundsLimit ? {limit: true} : undefined,
+                            $: limited ? {limit: true} : undefined,
                             ROUND: roundsDetails,
                         },
                     };
@@ -483,7 +525,7 @@ export class LnwWalletAdapter implements IWalletAdapter {
                     }
 
                     const rgsCurrencies = await getRgsCurrencies();
-                    const availableCurrencies = lnwCurrencies.filter(currency => rgsCurrencies.includes(currency));
+                    const availableCurrencies = lnwCurrencies.map(currency => this.fromWalletCurrency(currency, req.query.opid?.toString() || "")).filter(currency => rgsCurrencies.includes(currency));
                     const {provider} = await Game.get(game);
                     const betlevels = await getAvailableBetsBulk({
                         wallet: this.wallet,
@@ -556,7 +598,7 @@ export class LnwWalletAdapter implements IWalletAdapter {
                         res.send(builder.buildObject({...response, request: "getchecksumreport", rc: 1008, msg: "opid param required"}));
                         return;
                     }
-                    if (queryParams.algorithmttype !== "NGI_SHA1") {
+                    if (queryParams.algorithmtype !== "NGI_SHA1") {
                         res.send(builder.buildObject({...response, request: "getchecksumreport", rc: 1009, msg: "Unsupported algorithm type"}));
                         return;
                     }
@@ -614,14 +656,14 @@ export class LnwWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.get(`${path}/game`, async (req: Request<unknown, unknown, unknown, ILauncherQueryParams>, res: Response) => {
+        router.get("/game", async (req: Request<unknown, unknown, unknown, ILauncherQueryParams>, res: Response) => {
             const {
                 operatorid: brand,
                 gameid: game,
                 sessionid,
                 mode,
                 lang: language,
-                currency,
+                currency: walletCurrency,
                 device: channel,
                 depositurl: depositUrl,
                 lobbyurl: lobbyUrl,
@@ -636,6 +678,7 @@ export class LnwWalletAdapter implements IWalletAdapter {
             const realityCheckInterval = realityCheckIntervalInSeconds ? parseInt(realityCheckIntervalInSeconds) / 60 : undefined;
             const realityCheckElapsed = realityCheckElapsedInSeconds ? parseInt(realityCheckElapsedInSeconds) / 60 : undefined;
 
+            const currency = this.fromWalletCurrency(walletCurrency, brand).toLowerCase();
             let launchUrl: string;
             if (mode === "demo") {
                 const key = this.createDemoWalletPlayerKey(currency, req.query["jurisdiction"], brand);
@@ -665,7 +708,7 @@ export class LnwWalletAdapter implements IWalletAdapter {
         } = await this.fetch<IGetAccountRequest, IGetAccountResponse>(
             "getaccount",
             {
-                currency,
+                currency: this.toWalletCurrency(currency, brand).toUpperCase(),
                 device: channel,
                 gpgameid: game,
                 opid: brand,
@@ -675,12 +718,14 @@ export class LnwWalletAdapter implements IWalletAdapter {
             0,
         );
 
+        const fullNativeId = `${nativeId}_${brand}`;
         const session = await getConnection("primary")
             .manager.createQueryBuilder(Session, "session")
             .select("player.brand", "playerBrand")
+            .addSelect("session.data", "data")
             .leftJoin(Player, "player", "player.id = session.playerId")
-            .where(`"nativeId" = :nativeId`, {nativeId})
-            .andWhere(`token = :token`, {token})
+            .where(`"nativeId" = :nativeId`, {nativeId: fullNativeId})
+            .andWhere(`active = :active`, {active: true})
             .limit(1)
             .getRawOne();
         if (session) {
@@ -696,6 +741,16 @@ export class LnwWalletAdapter implements IWalletAdapter {
             }
         }
 
+        // Recover freeRounds data from previous session if player reconnected mid-promotion
+        let recoveredFreeRounds: {campaignId: string; activationId: string; numberOfBets: number; betAmount: number} | undefined;
+        const freeRounds = session?.data?.freeRounds;
+        if (promotions?.[0]?.FREEROUNDS?.[0] && freeRounds?.campaignId && freeRounds?.activationId && freeRounds?.numberOfBets > 0) {
+            const promotionActivationId = promotions[0].FREEROUNDS[0].ACTIVATIONID?.[0];
+            if (freeRounds.activationId === promotionActivationId) {
+                recoveredFreeRounds = freeRounds as typeof recoveredFreeRounds;
+            }
+        }
+
         const {
             RSP: {
                 BALANCE: [balance],
@@ -707,7 +762,7 @@ export class LnwWalletAdapter implements IWalletAdapter {
                 opid: brand,
                 gpgameid: game,
                 device: channel,
-                currency: currency.toUpperCase(),
+                currency: this.toWalletCurrency(currency, brand).toUpperCase(),
                 accountid: nativeId,
                 ...(promotions?.[0]?.FREEROUNDS?.[0]
                     ? {
@@ -721,14 +776,14 @@ export class LnwWalletAdapter implements IWalletAdapter {
         );
 
         const maxBet = jurisdiction === "uk" && playerMaxStake && playerMaxStake[0] > 5 ? 2 : playerMaxStake?.[0];
-        const popups = [...(this.messageToPopup(message) ?? []), ...(this.freeRoundsToPopup(promotions?.[0]?.FREEROUNDS) ?? [])];
+        const popups = [...(this.messageToPopup(message) ?? []), ...(this.freeRoundsToPopup(promotions?.[0]?.FREEROUNDS, language) ?? [])];
 
         return {
-            nativeId,
+            nativeId: `${nativeId}_${brand}`,
             brand,
             token,
             balance,
-            currency: currency.toLocaleLowerCase(),
+            currency,
             jurisdiction,
             sessionData: {
                 betConfig: {
@@ -737,6 +792,7 @@ export class LnwWalletAdapter implements IWalletAdapter {
                 sessionid,
                 channel,
                 language,
+                ...(recoveredFreeRounds ? {freeRounds: recoveredFreeRounds} : {}),
             },
             popups,
         };
@@ -744,6 +800,7 @@ export class LnwWalletAdapter implements IWalletAdapter {
 
     async balance(player: Player, provider: string, game: string, session: ISession): Promise<IWalletBalance> {
         const freeRounds = session.data.freeRounds;
+        const accountId = this.stripNativeIdSuffix(player.nativeId);
         const {
             RSP: {
                 BALANCE: [balance],
@@ -756,8 +813,8 @@ export class LnwWalletAdapter implements IWalletAdapter {
                 opid: player.brand!,
                 gpgameid: game,
                 device: session.data.channel,
-                currency: player.currency.toUpperCase(),
-                accountid: player.nativeId,
+                currency: this.toWalletCurrency(player.currency, player.brand!).toUpperCase(),
+                accountid: accountId,
                 ...(freeRounds
                     ? {
                           type: "freerounds",
@@ -778,7 +835,14 @@ export class LnwWalletAdapter implements IWalletAdapter {
             roundIdBigInt: this.convertToDecimal(transaction.roundId),
             transactionIdBigInt: this.convertToDecimal(transaction.transactionId),
         };
-        await Transaction.update({id: transaction.transactionId}, {data: transactionData});
+        const accountId = this.stripNativeIdSuffix(player.nativeId);
+        await Transaction.update(
+            {id: transaction.transactionId},
+            {
+                data: transactionData,
+                ...(freeRounds && freeRounds.numberOfBets > 0 ? {walletCampaignId: freeRounds.campaignId, campaignType: "freeBets"} : {}),
+            },
+        );
 
         let freeRound: any;
         if (freeRounds && freeRounds.numberOfBets > 0) {
@@ -808,9 +872,9 @@ export class LnwWalletAdapter implements IWalletAdapter {
                 {
                     device: (transaction.channel || session.data.channel || "desktop") as IDevice,
                     sessionid: session.token,
-                    accountid: player.nativeId,
+                    accountid: accountId,
                     opid: player.brand!,
-                    currency: player.currency.toUpperCase(),
+                    currency: this.toWalletCurrency(player.currency, player.brand!).toUpperCase(),
                     gpgameid: transaction.game!,
                     betamount: transaction.amount,
                     roundid: transactionData.roundIdBigInt!,
@@ -838,12 +902,12 @@ export class LnwWalletAdapter implements IWalletAdapter {
                         gpId: this.config.gpid,
                     },
                     player: {
-                        accountId: player.nativeId,
+                        accountId: accountId,
                         opId: player.brand!,
                     },
                     transaction: {
                         transactionAmount: transaction.amount,
-                        currency: player.currency.toUpperCase(),
+                        currency: this.toWalletCurrency(player.currency, player.brand!).toUpperCase(),
                         transactionId: transaction.transactionId,
                         sourceId: transaction.campaignId,
                         sessionId: session.sessionId,
@@ -900,9 +964,9 @@ export class LnwWalletAdapter implements IWalletAdapter {
                     {
                         device: (transaction.channel || session.data.channel || "desktop") as IDevice,
                         sessionid: session.token,
-                        accountid: player.nativeId,
+                        accountid: accountId,
                         opid: player.brand!,
-                        currency: player.currency.toUpperCase(),
+                        currency: this.toWalletCurrency(player.currency, player.brand!).toUpperCase(),
                         gpgameid: transaction.game!,
                         wonamount: transaction.amount,
                         roundid: transactionData.roundIdBigInt!,
@@ -922,6 +986,7 @@ export class LnwWalletAdapter implements IWalletAdapter {
 
     async cancel(player: Player, transaction: IWalletTransaction, session: ISession): Promise<IWalletBalance> {
         const freeRounds = session.data.freeRounds;
+        const accountId = this.stripNativeIdSuffix(player.nativeId);
 
         if (!transaction.data) {
             throw new Exception("Data required in LnW transaction was not persisted", {code: errorCodes.TRANSACTION_NOT_FOUND});
@@ -936,10 +1001,10 @@ export class LnwWalletAdapter implements IWalletAdapter {
             {
                 device: (transaction.channel || session.data.channel || "desktop") as IDevice,
                 sessionid: session.token,
-                accountid: player.nativeId,
+                accountid: accountId,
                 opid: player.brand!,
                 gpgameid: transaction.game!,
-                currency: player.currency.toUpperCase(),
+                currency: this.toWalletCurrency(player.currency, player.brand!).toUpperCase(),
                 gamestatus: ["finished", "cancelled", "rejected"].includes(transaction.status!) ? "completed" : "pending",
                 rollbackamount: transaction.amount,
                 roundid: transaction.data!.roundIdBigInt!,
@@ -961,9 +1026,9 @@ export class LnwWalletAdapter implements IWalletAdapter {
 
     async message(
         player: Player,
-        data: {type: "freeRounds"; campaignId: string; activationId: string; optionData: {numberOfBets: string; betAmount: string}},
+        data: {type: "freeRounds"; campaignId: string; activationId: string; optionData: {numberOfBets: number; betAmount: number}},
         session: ISession,
-    ): Promise<{action: IExceptionPopupButton["action"]; data: {betAmount: string}}> {
+    ): Promise<{action: IExceptionPopupButton["action"]; data: {betAmount: number}}> {
         if (data.type === "freeRounds") {
             const {
                 campaignId,
@@ -976,11 +1041,15 @@ export class LnwWalletAdapter implements IWalletAdapter {
         throw new Exception("Unknown message");
     }
 
+    private stripNativeIdSuffix(nativeId: string): string {
+        return nativeId.split("_")[0];
+    }
+
     private async isSidebet(roundId: string): Promise<boolean> {
         return (await Transaction.findBy({roundId, type: "withdraw"})).length > 1;
     }
 
-    private freeRoundsToPopup(freeRounds: IFreeRound[]): IExceptionPopup[] | undefined {
+    private freeRoundsToPopup(freeRounds: IFreeRound[], language: string): IExceptionPopup[] | undefined {
         if (!freeRounds) return;
 
         const freeRound = freeRounds[0];
@@ -990,7 +1059,17 @@ export class LnwWalletAdapter implements IWalletAdapter {
             ENDDATE: [endDate],
             MESSAGES: messages,
         } = freeRound;
-        const endDateFormatted = DateTime.local().until(DateTime.fromISO(endDate)).toDuration(["years", "months", "days", "hours", "minutes"]).toHuman({unitDisplay: "long", showZeros: false, maximumFractionDigits: 0});
+
+        // Format the end date duration in the players's language but fallback to default english if an error occurs
+        // as noticed during testing, some languages may cause issues during translation (e.g. an invalid 'awvwgwr' language code would fallback to english without errors but 'awdw' causes an exception)
+        const endDateDuration = DateTime.local().until(DateTime.fromISO(endDate)).toDuration(["years", "months", "days", "hours", "minutes"]);
+        let endDateFormatted;
+        try {
+            endDateFormatted = endDateDuration.reconfigure({locale: language}).toHuman({unitDisplay: "long", showZeros: false, maximumFractionDigits: 0});
+        } catch (e) {
+            logger.error(`Error translating free rounds end date duration: ${(e as Error).message}`, {language});
+            endDateFormatted = endDateDuration.toHuman({unitDisplay: "long", showZeros: false, maximumFractionDigits: 0});
+        }
 
         const popups: IExceptionPopup[] = [];
         const title = "lnw_freeBetsTitle";

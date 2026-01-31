@@ -162,6 +162,11 @@ export interface FairnessProof {
     }[];
 }
 
+interface WebsocketApi {
+    send: (type: "command" | "cheat", payload: any) => void;
+    close: () => void;
+}
+
 const GameHistoryTable: FC<{columns: any[]; getData: (page: number) => Promise<any[]>}> = ({columns, getData}) => {
     const [data, setData] = useState<{hasNext: boolean; hasPrev: boolean; data?: any[]}>({hasNext: false, hasPrev: false});
     const [page, setPage] = useState(0);
@@ -212,6 +217,7 @@ export class Connector {
     public bets: IBets | undefined;
     private sessionId: string = v4();
     public readonly emitter: AsyncEventEmitter = new AsyncEventEmitter();
+    private websocketApis: Set<WebsocketApi> = new Set();
 
     constructor(ui: () => UiApi, settings: ISettings = {}, callbacks: ICallbacks = {}) {
         this.settings = settings;
@@ -242,7 +248,7 @@ export class Connector {
         this.emitter.on("refreshBalance", () => this.balance().then(({balance}) => this.callbacks?.balanceChanged?.(balance)));
     }
 
-    private async fetch(method: "POST" | "GET", path: string, data: any, reloadOnError: boolean = true, server?: string) {
+    public async fetch(method: "POST" | "GET", path: string, data: any, reloadOnError: boolean = true, server?: string) {
         let response: Response;
         let json: any;
         const encryptionKey = v4();
@@ -555,7 +561,7 @@ export class Connector {
         return {balance};
     }
 
-    async authenticate(): Promise<{balance: number; currency: string; currencyDecimals: number; currencySymbol: string; jurisdiction?: string; playerId: string, nickname?: string}> {
+    async authenticate(): Promise<{balance: number; currency: string; currencyDecimals: number; currencySymbol: string; jurisdiction?: string; playerId: string; nickname?: string}> {
         const data = {wallet: this.settings.wallet, operator: this.settings.operator, key: this.settings.key, provider: this.settings.provider, game: this.settings.game};
         const {balance, token, currency, currencyDecimals, currencySymbol, sessionData, jurisdiction, playerId, nickname, popups} = await this.fetch("POST", "/authenticate", data);
         this.currency = currency;
@@ -617,7 +623,7 @@ export class Connector {
         this.roundId = (complete && !wager.next?.length) || parallelRound ? null : roundId;
 
         await this.emitter.emit("wager", {wager: {...wager, bet}, balance, roundId});
-        if (complete && !wager.next?.length) await this.emitter.emit("stopped", {roundId, balance});
+        if (complete && !wager.next?.length) await this.emitter.emit("stopped", {roundId, balance, finalWin: complete.finalWin});
         if (balance) {
             await this.emitter.emit("balance", {balance});
         }
@@ -637,7 +643,7 @@ export class Connector {
         const result = await this.fetch("POST", "/game/complete", data);
         const {finalWin, popups, balance} = result;
         await this.emitter.emit("stopped", {roundId: data.roundId, balance, finalWin});
-        await this.emitter.emit("balance", {balance});
+        balance != null && (await this.emitter.emit("balance", {balance}));
         if (popups?.length) {
             this.callbacks?.stopAutoplay && this.callbacks.stopAutoplay();
             this.showMessagePopups(popups);
@@ -817,6 +823,7 @@ export class Connector {
     async exit(skipPopup: boolean = false): Promise<void> {
         const exitTarget = this.settings.exitTarget === "self" ? window : window.top || window;
         if (skipPopup) {
+            this.websocketApis.forEach(websocketApi => websocketApi.close());
             if (this.settings.customExit) {
                 await this.emitter.emit("exit", {lobbyUrl: this.settings.lobbyUrl});
             } else if (this.settings.lobbyUrl) {
@@ -1000,6 +1007,7 @@ export class Connector {
         let pingInterval: NodeJS.Timeout | null = null;
         let pongTimeout: NodeJS.Timeout | null = null;
         const encryptionKey = this.settings.enc ? v4() : "";
+        let manualClose = false;
 
         const clearPingTimers = () => {
             if (pingInterval) {
@@ -1037,6 +1045,7 @@ export class Connector {
             };
 
             ws.onopen = () => {
+                manualClose = false;
                 onConnected();
                 retryCounter = 0;
 
@@ -1055,7 +1064,7 @@ export class Connector {
                 clearPingTimers();
                 onDisconnected();
                 ws = null;
-                if (event.reason === "Unauthorized") {
+                if (manualClose || event.reason === "Unauthorized") {
                     return;
                 }
                 const delay = retryTimeout[Math.min(retryCounter, retryTimeout.length - 1)] * 1000;
@@ -1066,7 +1075,7 @@ export class Connector {
 
         connect(0);
 
-        return {
+        const websocketApi: WebsocketApi = {
             send: (type: "command" | "cheat", payload: any) => {
                 if (!ws) throw new Error("WebSocket is not connected");
                 let data = JSON.stringify({type, payload});
@@ -1075,6 +1084,14 @@ export class Connector {
                 }
                 ws.send(data);
             },
+            close: () => {
+                manualClose = true;
+                this.websocketApis.delete(websocketApi);
+                if (!ws) throw new Error("WebSocket is not connected");
+                ws.close();
+            },
         };
+        this.websocketApis.add(websocketApi);
+        return websocketApi;
     }
 }

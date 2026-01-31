@@ -1,8 +1,8 @@
-import {Express} from "express";
+import {Router} from "express";
 import {Player} from "../db/model/Player";
 import {ISessionData} from "../db/model/Session";
 import {IExceptionPopup, IExceptionPopupButton} from "@slotify/shared/lib/Exception";
-import {IRegulatory, TransactionType, TransactionStatus, ITransactionData} from "../db/model/Transaction";
+import {IRegulatory, TransactionType, TransactionStatus, ITransactionData, ICampaignData} from "../db/model/Transaction";
 
 export interface IWalletBalance {
     balance: number;
@@ -44,7 +44,8 @@ export interface ITransaction {
     roundFinished: boolean;
     campaignType?: string;
     campaignId?: string;
-    campaignData?: any;
+    walletCampaignId?: string;
+    campaignData?: ICampaignData;
     winRatio?: number;
     channel?: string;
     variant?: string;
@@ -69,7 +70,7 @@ export default interface IWalletAdapter {
     wallet: string;
     config: any;
 
-    init(wallet: string, api: Express, path: string, config: any, whitelistedIps?: string[]): Promise<void>;
+    init(wallet: string, router: Router, config: any, whitelistedIps?: string[]): Promise<void>;
 
     authenticate(key: string, operator: string, provider: string, game: string, ip?: string, channel?: "desktop" | "mobile"): Promise<IWalletAuthenticate>;
 
@@ -77,7 +78,7 @@ export default interface IWalletAdapter {
 
     transaction(player: Player, transaction: IWalletTransaction, session: ISession, originalSession?: ISession | null): Promise<IWalletBalance>;
 
-    cancel(player: Player, transaction: IWalletTransaction, session: ISession, originalSession?: ISession | null): Promise<IWalletBalance>;
+    cancel(player: Player, transaction: IWalletTransaction, session: ISession, originalSession?: ISession | null, auto?: boolean): Promise<IWalletBalance>;
 
     end?(player: Player, reason: "expired" | "authenticate" | "error", session: ISession): Promise<void>;
 

@@ -120,7 +120,7 @@ export async function createService(
 
                 if (res.statusCode >= 400) {
                     logger.warn(message, meta);
-                } else if (ignore.includes(req.originalUrl)) {
+                } else if (ignore.includes(req.originalUrl) || req.method === "OPTIONS") {
                     logger.verbose(message, meta);
                 } else if (isInternal(req)) {
                     logger.http(message, meta);
@@ -245,6 +245,9 @@ export async function startService(api: Express, defaultPort: number = 8080): Pr
                 }
                 services[name] = res;
             }
+        }
+        if (status !== StatusCode.OK) {
+            logger.error("[health] One or more services are offline", {services});
         }
         res.status(status).json(services);
     });

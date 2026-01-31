@@ -13,18 +13,12 @@ import {inspection} from "../inspection/inspection";
 import removeUnderscoredKeys from "@slotify/shared/lib/removeUnderscoredKeys";
 import {getTransactionId} from "../util/ids";
 import {Wallet} from "../db/model/Wallet";
-import {isGeoIpBlocked, isIpBlocked} from "../util/ip";
 import {scheduleTask, unsheduleTask} from "@slotify/shared/lib/scheduler";
 import {executeInQueue} from "@slotify/shared/lib/queue";
 import {serviceMetrics} from "../util/metrics";
 import {ReportExclusion} from "../db/model/ReportExclusion";
 import {isOneTimeKeyBlocked} from "../util/wallet";
 import {round} from "@slotify/shared/lib/round";
-
-const apiBlockedCountries = (process.env.API_BLOCKED_COUNTRIES || "")
-    .split(",")
-    .filter(country => !!country)
-    .map(country => country.toLowerCase());
 
 type IAuthenticate = {
     nativeId: string;
@@ -51,10 +45,10 @@ async function getNormalisedAmount(roundId: string, amount: number): Promise<num
 }
 
 export default {
-    async authenticate(wallet: string, operator: string, key: string, provider: string, game: string, ip?: string, ipBlockHeader?: boolean, channel?: "desktop" | "mobile"): Promise<IAuthenticate> {
+    async authenticate(wallet: string, operator: string, key: string, provider: string, game: string, ip?: string, ipCountry?: string, ipRegion?: string, channel?: "desktop" | "mobile"): Promise<IAuthenticate> {
         const walletAdapter = await getWalletAdapter(wallet);
         try {
-            logger.info("Authenticating player", {wallet, operator, key});
+            logger.info("Authenticating player", {wallet, operator, key, ipCountry, ipRegion});
 
             const cachedSession = await Session.getCachedSession(key, provider, game, await Wallet.getKeyCacheExpiry(wallet));
             if (cachedSession) {
@@ -67,9 +61,8 @@ export default {
             const {balance, token, sessionData, popups, campaignTypes, ...nativeUser} = await walletAdapter.authenticate(key, operator, provider, game, ip, channel);
 
             if (nativeUser.currency.toLowerCase() !== nativeUser.currency) throw new Exception("Player currency should be lowercase", {data: {...nativeUser}});
-            if (nativeUser.country && apiBlockedCountries.includes(nativeUser.country.toLowerCase())) throw new Exception("Territory blocked (API country)", {code: "BLOCKED_TERRITORY", data: {...nativeUser}});
-            if (await isIpBlocked(wallet, ipBlockHeader)) throw new Exception("Territory blocked (IP)", {code: "BLOCKED_TERRITORY", data: {...nativeUser}});
-            if (await isGeoIpBlocked(wallet, ip)) throw new Exception("Territory blocked (Geo IP)", {code: "BLOCKED_TERRITORY", data: {...nativeUser}});
+
+            if (await Wallet.isTerritoryBlocked(wallet, ipCountry, ipRegion, nativeUser.country)) throw new Exception("Territory blocked", {code: "BLOCKED_TERRITORY", data: {...nativeUser}});
             if (await isOneTimeKeyBlocked(wallet, key)) throw new Exception("One-time key blocked", {code: "PLAYER_UNAUTHORIZED", data: {...nativeUser}});
             if (!(await getSupportedCurrencies()).includes(nativeUser.currency)) throw new Exception("Currency not supported", {data: {...nativeUser}, code: "CURRENCY_NOT_SUPPORTED"});
 
@@ -95,7 +88,7 @@ export default {
             });
             futureAnthem.authenticate(player, playerExclusion);
 
-            logger.info(`Player authenticated ${player.id}`, {wallet, operator, key, player, nativeId: nativeUser.nativeId, nativeUser});
+            logger.info(`Player authenticated ${player.id}`, {wallet, operator, key, player, nativeId: nativeUser.nativeId, nativeUser, ipCountry, ipRegion});
             return {...nativeUser, currency: player.currency, balance, playerId: player.id, sessionData: sessionData ? removeUnderscoredKeys(sessionData) : undefined, sessionId, popups};
         } catch (e) {
             logger.info(`Authentication failed (${(e as Error).message})`, {wallet, operator, error: e});
@@ -115,6 +108,7 @@ export default {
         let {
             campaignType,
             campaignId,
+            walletCampaignId,
             campaignData,
             callFinished,
             jackpotAmount,
@@ -132,17 +126,18 @@ export default {
             nickname,
         });
 
+        if (campaignType && transaction.campaignType) {
+            throw new Exception("RGS already specified campaign for the transaction", {data: {transaction, campaignType, campaignId, campaignData}});
+        }
+
         if (campaignType) transaction.campaignType = campaignType;
         if (campaignId) transaction.campaignId = campaignId;
+        if (walletCampaignId) transaction.walletCampaignId = walletCampaignId;
         if (campaignData) transaction.campaignData = campaignData;
+
         if (jackpotAmount && transaction.jackpotAmount) throw new Exception("Can't overwrite jackpot amount");
         if (jackpotAmount) {
-            transaction.jackpotAmount = jackpotAmount;
-            // for withdrawal jackpotAmount is already included in amount
-            // deposit requires appending it to the total amount
-            if (transaction.type === "deposit") {
-                transaction.amount += jackpotAmount;
-            }
+            transaction.jackpotAmount = jackpotAmount; // informative
         }
 
         let createdAt = existingTransaction?.createdAt;
@@ -175,11 +170,18 @@ export default {
         try {
             logger.info(`Sending transaction ${transactionId}`, {playerId, nativeId, wallet, operator, brand, transaction});
 
-            const startTime = new Date().getTime();
             const walletTransaction: IWalletTransaction = {transactionId, createdAt: createdAt!, ...transaction};
             const originalSession = existingTransaction?.sessionId ? await Session.get(existingTransaction.sessionId) : null;
-            const {balance, popups} = await executeInQueue(await getParallelTransactionId(wallet, playerId), async () => await walletAdapter.transaction(player, walletTransaction, session, originalSession), 20, 60000);
-            const responseTime = new Date().getTime() - startTime;
+            const {balance, popups, responseTime} = await executeInQueue(
+                await getParallelTransactionId(wallet, playerId),
+                async () => {
+                    const startTime = Date.now();
+                    const result = await walletAdapter.transaction(player, walletTransaction, session, originalSession);
+                    return {...result, responseTime: Date.now() - startTime};
+                },
+                20,
+                40000,
+            );
 
             if (callFinished) {
                 const res = await sendToPromo(transaction.type + "Finished", transaction.category, {transactionId, ...transaction, playerId, nativeId, wallet, operator, brand, currency, jurisdiction, nickname});
@@ -198,6 +200,22 @@ export default {
             logger.info(`Transaction failed ${transactionId} (${code})`, {playerId, nativeId, wallet, operator, brand, transaction, error: e});
             serviceMetrics.updateFailedTransactionsCounter(transaction.game!, e.message, wallet, e.data?.error, operator, code, brand);
             await Transaction.failed(transactionId, code);
+
+            // Notify promo to clean up any state from the failed withdraw
+            if (transaction.type === "withdraw") {
+                await sendToPromo("withdrawFailed", transaction.category, {
+                    transactionId,
+                    ...transaction,
+                    playerId,
+                    nativeId,
+                    wallet,
+                    operator,
+                    brand,
+                    currency,
+                    jurisdiction,
+                    nickname,
+                }).catch(err => logger.warn("Failed to notify promo of withdrawFailed", {transactionId, error: err}));
+            }
 
             if (e instanceof Exception) {
                 throw e;
@@ -234,9 +252,9 @@ export default {
             const originalSession = transaction?.sessionId ? await Session.get(transaction.sessionId) : null;
             const {balance} = await executeInQueue(
                 await getParallelTransactionId(wallet, transaction.playerId),
-                async () => await walletAdapter.cancel(player, {transactionId: transaction.id, ...transaction} as IWalletTransaction, session, originalSession),
+                async () => await walletAdapter.cancel(player, {transactionId: transaction.id, ...transaction} as IWalletTransaction, session, originalSession, auto),
                 20,
-                60000,
+                40000,
             );
             logger.info(`Transaction cancelled ${transaction.id}`, {balance, wallet, operator, brand, nativeId, transactionId: transaction.id});
             await Transaction.cancelled(transaction.id);

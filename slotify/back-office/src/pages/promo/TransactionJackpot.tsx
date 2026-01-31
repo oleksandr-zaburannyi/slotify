@@ -4,12 +4,13 @@ import {Button, Form, Input, InputNumber, message, Select, Space} from "antd";
 import {DeleteOutlined, PlusCircleOutlined} from "@ant-design/icons";
 import env from "../../lib/env";
 import {tableFilter} from "../../components/DataTable";
+import SelectAutoComplete from "../../components/SelectAutoComplete";
 
 type IPoolConfig = {contributionRate: number; seedContributionRate: number; reset: number; probability: number};
-type IConfig = {[poolName: string]: IPoolConfig};
+type IConfig = {poolsConfig: {[poolName: string]: IPoolConfig}; baseCurrency: string};
 
 export const TransactionJackpotConfig: React.FC<ConfigProps<IConfig>> = ({value, onChange, edit}) => {
-    const [data, setData] = useState<IConfig>(value || {});
+    const [data, setData] = useState<IConfig>(value || {poolsConfig: {}, baseCurrency: env.VITE_BASE_CURRENCY});
     useEffect(() => {
         if (data && onChange) {
             onChange(data);
@@ -17,54 +18,54 @@ export const TransactionJackpotConfig: React.FC<ConfigProps<IConfig>> = ({value,
     }, [data]);
 
     const patchName = (index: number, name: string) => {
-        if (data[name]) {
+        if (data.poolsConfig[name]) {
             message.warning("Pool name needs to be unique").then();
             return;
         }
         setData(prev => {
-            const entries = Object.entries(prev);
+            const entries = Object.entries(prev.poolsConfig);
             entries[index][0] = name;
-            return Object.fromEntries(entries);
+            return {poolsConfig: Object.fromEntries(entries), baseCurrency: data.baseCurrency};
         });
     };
 
     const patchEntry = (index: number, poolConfig: Partial<IPoolConfig>) => {
         setData(prev => {
-            const entries = Object.entries(prev);
+            const entries = Object.entries(prev.poolsConfig);
             entries[index][1] = {...entries[index][1], ...poolConfig};
-            return Object.fromEntries(entries);
+            return {poolsConfig: Object.fromEntries(entries), baseCurrency: data.baseCurrency};
         });
     };
 
     const removeEntry = (index: number) => {
         setData(prev => {
-            const entries = Object.entries(prev);
+            const entries = Object.entries(prev.poolsConfig);
             entries.splice(index, 1);
-            return Object.fromEntries(entries);
+            return {poolsConfig: Object.fromEntries(entries), baseCurrency: data.baseCurrency};
         });
     };
 
     const addEntry = () => {
         setData(prev => {
-            const entries = Object.entries(prev);
-            const newData = {...data};
+            const entries = Object.entries(prev.poolsConfig);
+            const newPools = {...data.poolsConfig};
             let index = entries.length;
-            while (Object.keys(newData).includes("pool" + index)) {
+            while (Object.keys(newPools).includes("pool" + index)) {
                 index++;
             }
-            newData["pool_" + index] = {
+            newPools["pool_" + index] = {
                 contributionRate: 0.02,
                 seedContributionRate: 0.01,
                 reset: 0,
                 probability: 0.0001,
             };
-            return newData;
+            return {poolsConfig: newPools, baseCurrency: data.baseCurrency};
         });
     };
 
     return (
         <>
-            {Object.entries(data).map(([poolName, {contributionRate, seedContributionRate, reset, probability}], index) => (
+            {Object.entries(data.poolsConfig).map(([poolName, {contributionRate, seedContributionRate, reset, probability}], index) => (
                 <Space.Compact key={index}>
                     <Form.Item label={"Pool name"}>
                         <Input type="text" key={index + "_name"} value={poolName} disabled={edit} onChange={e => patchName(index, e.target.value)} style={{width: 130, marginRight: 20}} />
@@ -113,6 +114,9 @@ export const TransactionJackpotConfig: React.FC<ConfigProps<IConfig>> = ({value,
             <Button type="dashed" style={{width: "50%", marginLeft: "25%"}} icon={<PlusCircleOutlined />} disabled={edit} onClick={() => addEntry()}>
                 Add tier
             </Button>
+            <Form.Item initialValue={value?.baseCurrency} label="Base currency" name="baseCurrency" style={{width: 160, marginRight: 100}} rules={[{required: true, message: "Please select currency"}]}>
+                <SelectAutoComplete type={"currencies"} mode={"single-select"} disabled={edit} onChange={baseCurrency => setData({...data, baseCurrency})} />
+            </Form.Item>
         </>
     );
 };
@@ -128,12 +132,12 @@ const TransactionJackpotModificationEvent: React.FC<EventProps<{tier: string; va
         <Space.Compact>
             <Form.Item label="Pool Name" name="poolName" rules={[{required: true, message: "Please input"}]} style={{width: 220}}>
                 <Select onChange={tier => setData({...data, tier})} style={{width: 150}}>
-                    {Object.entries(config).map(([poolName]) => {
+                    {Object.entries(config.poolsConfig).map(([poolName]) => {
                         return <Select.Option key={poolName}>{poolName}</Select.Option>;
                     })}
                 </Select>
             </Form.Item>
-            <Form.Item label={`Modify pool by value (${env.VITE_BASE_CURRENCY?.toUpperCase()}}`} name="value" rules={[{required: true, message: "Please input"}]} style={{width: 220}}>
+            <Form.Item label={`Modify pool by value (${config.baseCurrency})`} name="value" rules={[{required: true, message: "Please input"}]} style={{width: 220}}>
                 <InputNumber type="number" onChange={value => setData({...data, value: value as number})} style={{width: 150}} />
             </Form.Item>
         </Space.Compact>

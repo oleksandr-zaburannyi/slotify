@@ -16,6 +16,10 @@ import {importCsv} from "@slotify/shared/lib/importCSV";
 import {scheduleCampaignFinish, unscheduleCampaignFinish} from "../util/scheduleTasks";
 import {startStream, stopStream} from "../util/streams";
 import logger from "@slotify/shared/lib/logger";
+import {DGE_jackpot} from "../tools/jackpots/jackpotsReport";
+import {baseCurrency, getCurrencies} from "../util/currencyRates";
+import exchangePrizeValue from "../util/exchangePrizeValue";
+import {round} from "@slotify/shared/lib/round";
 
 interface IContext {
     account: IAccount;
@@ -44,6 +48,7 @@ export default {
             const columns: IColumn[] = [
                 {alias: "campaignId", sql: "campaign.campaignId", filters: ["EQUAL"], type: "uuid"},
                 {alias: "name", sql: "campaign.name", sort: true, filters: ["EQUAL", "LIKE"]},
+                {alias: "walletCampaignId", sql: "campaign.walletCampaignId", filters: ["EQUAL"]},
                 {alias: "type", sql: "campaign.type", sort: true, filters: ["EQUAL", "LIKE", "IN"]},
                 {alias: "createdAt", sql: "campaign.createdAt", sort: true, filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"]},
                 {alias: "start", sql: "campaign.start", sort: true, filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"]},
@@ -184,6 +189,29 @@ export default {
         },
         async defaultThemes(): Promise<IDefaultThemes> {
             return defaultThemes;
+        },
+        async DGE_jackpot(_: any, {campaignId, timestamp}: {campaignId: string; timestamp: number}) {
+            return {items: await DGE_jackpot(campaignId, timestamp)};
+        },
+        async exchangedPrizeValues(_: any, {baseValue}: {baseValue: number}) {
+            if (baseValue <= 0) return [];
+
+            const currencies = await getCurrencies();
+            const baseCurrencyData = currencies.find(c => c.currency === baseCurrency);
+            if (!baseCurrencyData) throw new Exception("Base currency not found");
+
+            return currencies
+                .filter(c => c.currency !== baseCurrency)
+                .map(({currency, rate}) => {
+                    const currencyRate = rate / baseCurrencyData.rate;
+                    let exchangedValue: number;
+                    try {
+                        exchangedValue = exchangePrizeValue(baseValue, currencyRate);
+                    } catch {
+                        exchangedValue = round(baseValue * currencyRate, 8);
+                    }
+                    return {currency, rate: currencyRate, exchangedValue};
+                });
         },
     },
     Mutation: {

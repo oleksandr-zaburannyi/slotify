@@ -10,6 +10,8 @@ import fetch, {RequestInfo, Response} from "@slotify/shared/lib/fetch";
 import * as request from "supertest";
 import * as crypto from "crypto";
 import {Player} from "../db/model/Player";
+import {Session} from "../db/model/Session";
+import {Transaction} from "../db/model/Transaction";
 import * as xml2js from "xml2js";
 import {v4} from "uuid";
 import wait from "@slotify/shared/lib/wait";
@@ -18,10 +20,16 @@ import {DateTime} from "../util/luxon";
 import logger from "@slotify/shared/lib/logger";
 import {cleanupAfterTests} from "./cleanup";
 import {CurrencyExchange} from "../db/model/CurrencyExchange";
+import {CurrencyAlias} from "../db/model/CurrencyAlias";
 
 let api: Express;
 
 const wallet = "lnw-wallet";
+const brandWithCurrencyAlias = "alias-brand";
+const walletCurrency = "eur";
+const walletCurrencyAlias = "eur-lnw";
+const globalAliasCurrency = "usd";
+const globalAliasValue = "usd-global";
 const walletConfig = {
     url: "https://lnw.wallet.com/api/test-provider",
     username: "test-user",
@@ -34,6 +42,15 @@ const walletConfig = {
     ogsGameIdsMapping: {
         "123456": "test-game",
         "789012": "test-game2",
+    },
+    currencyAliases: {
+        [globalAliasCurrency]: globalAliasValue,
+        [walletCurrency]: "eur-global",
+    },
+    currencyAliasesPerBrand: {
+        [walletCurrency]: {
+            [brandWithCurrencyAlias]: walletCurrencyAlias,
+        },
     },
 };
 const rgsConfig = {
@@ -53,6 +70,12 @@ beforeAll(async () => {
     await Game.create({game: "test-game", provider: "test-provider", rgs: "test-rgs"}).save();
     await CurrencyExchange.create({currency: "sek", rate: 1, date: new Date()}).save();
     await CurrencyExchange.create({currency: "eur", rate: 1, date: new Date()}).save();
+    await CurrencyAlias.create({currency: walletCurrency, alias: walletCurrencyAlias, multiplier: 1}).save();
+    await CurrencyExchange.create({currency: walletCurrencyAlias, rate: 1, date: new Date()}).save();
+    await CurrencyAlias.create({currency: globalAliasCurrency, alias: globalAliasValue, multiplier: 1}).save();
+    await CurrencyExchange.create({currency: globalAliasValue, rate: 1, date: new Date()}).save();
+    await CurrencyAlias.create({currency: walletCurrency, alias: "eur-global", multiplier: 1}).save();
+    await CurrencyExchange.create({currency: "eur-global", rate: 1, date: new Date()}).save();
     api = await initService();
 
     // disable inspectionConfig to allow multiple withdraws in order to test sidebets
@@ -249,7 +272,7 @@ describe("lnw wallet adapter", () => {
             balance: 1.23,
             brand: "casino",
             currency: "eur",
-            nativeId: "1234",
+            nativeId: "1234_casino",
             playerId: expect.any(String),
             popups: [],
             sessionData: {betConfig: {}, channel: "desktop", language: "en", sessionid: "session-id"},
@@ -278,7 +301,7 @@ describe("lnw wallet adapter", () => {
             balance: 1.23,
             brand: "casino",
             currency: "eur",
-            nativeId: "1234",
+            nativeId: "1234_casino",
             playerId: expect.any(String),
             popups: [],
             sessionData: {betConfig: {maxBet: 200}, channel: "desktop", language: "en", sessionid: "session-id"},
@@ -309,7 +332,7 @@ describe("lnw wallet adapter", () => {
             brand: "casino",
             currency: "eur",
             jurisdiction: "uk",
-            nativeId: "1234",
+            nativeId: "1234_casino",
             playerId: expect.any(String),
             popups: [],
             sessionData: {betConfig: {maxBet: 2}, channel: "desktop", language: "en", sessionid: "session-id"},
@@ -339,7 +362,7 @@ describe("lnw wallet adapter", () => {
             brand: "casino",
             currency: "eur",
             jurisdiction: "uk",
-            nativeId: "1234",
+            nativeId: "1234_casino",
             playerId: expect.any(String),
             popups: [],
             sessionData: {betConfig: {maxBet: 2}, channel: "desktop", language: "en", sessionid: "session-id"},
@@ -369,7 +392,7 @@ describe("lnw wallet adapter", () => {
             brand: "casino",
             currency: "eur",
             jurisdiction: "uk",
-            nativeId: "1234",
+            nativeId: "1234_casino",
             playerId: expect.any(String),
             popups: [],
             sessionData: {betConfig: {maxBet: 1}, channel: "desktop", language: "en", sessionid: "session-id"},
@@ -399,7 +422,7 @@ describe("lnw wallet adapter", () => {
             brand: "casino",
             currency: "eur",
             jurisdiction: "uk",
-            nativeId: "1234",
+            nativeId: "1234_casino",
             playerId: expect.any(String),
             popups: [],
             sessionData: {betConfig: {maxBet: 2}, channel: "desktop", language: "en", sessionid: "session-id"},
@@ -429,12 +452,262 @@ describe("lnw wallet adapter", () => {
             brand: "casino",
             currency: "eur",
             jurisdiction: "uk",
-            nativeId: "1234",
+            nativeId: "1234_casino",
             playerId: expect.any(String),
             popups: [],
             sessionData: {betConfig: {maxBet: 5}, channel: "desktop", language: "en", sessionid: "session-id"},
             sessionId: expect.any(String),
         });
+    });
+    test("authenticate - recover freeRounds from previous session", async () => {
+        const {launchParams} = await launch();
+        const activationId = "test-activation-123";
+        const campaignId = "test-campaign-456";
+        const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+        // First authenticate with freeRounds promotion (only 1 free round)
+        queueMockWalletXMLResponse("getaccount", {
+            ACCOUNTID: 1234,
+            CURRENCY: "EUR",
+            COUNTRY: "SWE",
+            SESSIONID: "session-id-1",
+            PROMOTIONS: [
+                {
+                    FREEROUNDS: [
+                        {
+                            CAMPAIGNID: [campaignId],
+                            ACTIVATIONID: [activationId],
+                            TOTALWIN: [0],
+                            CAMPAIGNVALUE: [1],
+                            REJECTABLE: [false],
+                            ENDDATE: [endDate],
+                            MESSAGES: [],
+                            OPTIONS: [{OPTION: [{BETLEVEL: [1], TOTALROUNDS: [1], REMAININGROUNDS: [1], FEATURE: [""]}]}],
+                        },
+                    ],
+                },
+            ],
+        });
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 100, SESSIONID: "session-id-1"});
+        const params = {key: launchParams.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        const authRes = await request(api).post("/rgs/test-rgs/authenticate").set(header(params)).send(params).expect(200);
+
+        // Verify popup with freeRounds is returned
+        expect(authRes.body.popups).toBeDefined();
+        expect(authRes.body.popups[0].buttons[0].data.type).toEqual("freeRounds");
+
+        const player = await Player.findOneBy({brand: "casino"});
+        expect(player).toBeTruthy();
+
+        // Accept freeRounds via /message endpoint (simulates user clicking popup button) - only 1 free round
+        const messageParams = {
+            playerId: player!.id,
+            provider: "test-provider",
+            game: "test-game",
+            data: {type: "freeRounds", campaignId, activationId, optionData: {numberOfBets: 1, betAmount: 1}},
+        };
+        await request(api).post("/rgs/test-rgs/message").set(header(messageParams)).send(messageParams).expect(200);
+
+        // Verify session now has freeRounds stored
+        const activeSession = await Session.findOneBy({playerId: player!.id, active: true});
+        expect(activeSession).toBeTruthy();
+        expect(activeSession!.data?.freeRounds).toEqual({campaignId, activationId, numberOfBets: 1, betAmount: 1});
+
+        // Re-authenticate - player reconnects, wallet still reports the same freeRounds promotion
+        const {launchParams: launchParams2} = await launch();
+        queueMockWalletXMLResponse("getaccount", {
+            ACCOUNTID: 1234,
+            CURRENCY: "EUR",
+            COUNTRY: "SWE",
+            SESSIONID: "session-id-2",
+            PROMOTIONS: [
+                {
+                    FREEROUNDS: [
+                        {
+                            CAMPAIGNID: [campaignId],
+                            ACTIVATIONID: [activationId],
+                            TOTALWIN: [0],
+                            CAMPAIGNVALUE: [1],
+                            REJECTABLE: [false],
+                            ENDDATE: [endDate],
+                            MESSAGES: [],
+                            OPTIONS: [{OPTION: [{BETLEVEL: [1], TOTALROUNDS: [1], REMAININGROUNDS: [1], FEATURE: [""]}]}],
+                        },
+                    ],
+                },
+            ],
+        });
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 100, SESSIONID: "session-id-2"});
+        const params2 = {key: launchParams2.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        await request(api).post("/rgs/test-rgs/authenticate").set(header(params2)).send(params2).expect(200);
+
+        // Verify new session recovered freeRounds from the previous session
+        const session2 = await Session.findOneBy({playerId: player!.id, active: true});
+        expect(session2).toBeTruthy();
+        expect(session2!.sessionId).not.toEqual(activeSession!.sessionId);
+        expect(session2!.data?.freeRounds).toEqual({
+            campaignId,
+            activationId,
+            numberOfBets: 1,
+            betAmount: 1,
+        });
+
+        // Make a wager (bet) to use up the last free round
+        const roundId = v4();
+        const wagerParams = {
+            playerId: player!.id,
+            channel: "desktop",
+            rgsTransactionId: v4(),
+            amount: 1,
+            roundId,
+            category: "normal",
+            roundFinished: false,
+            type: "withdraw",
+            game: "test-game",
+            provider: "test-provider",
+        };
+        queueMockWalletXMLResponse("wager", {BALANCE: 99, SESSIONID: "session-id-2"});
+        await request(api).put("/rgs/test-rgs/transaction").set(header(wagerParams)).send(wagerParams).expect(200);
+        await wait(100);
+
+        // Make a result (win) to complete the round - this decrements numberOfBets to 0
+        const resultParams = {
+            playerId: player!.id,
+            channel: "desktop",
+            rgsTransactionId: v4(),
+            amount: 1,
+            roundId,
+            category: "normal",
+            roundFinished: true,
+            type: "deposit",
+            game: "test-game",
+            provider: "test-provider",
+        };
+        queueMockWalletXMLResponse("result", {BALANCE: 100, SESSIONID: "session-id-2"});
+        await request(api).put("/rgs/test-rgs/transaction").set(header(resultParams)).send(resultParams).expect(200);
+
+        // Verify session now has numberOfBets = 0
+        const session2Updated = await Session.findOneBy({sessionId: session2!.sessionId});
+        expect(session2Updated!.data?.freeRounds?.numberOfBets).toEqual(0);
+
+        // Third authenticate - freeRounds should NOT be recovered because numberOfBets is 0
+        const {launchParams: launchParams3} = await launch();
+        queueMockWalletXMLResponse("getaccount", {
+            ACCOUNTID: 1234,
+            CURRENCY: "EUR",
+            COUNTRY: "SWE",
+            SESSIONID: "session-id-3",
+            PROMOTIONS: [
+                {
+                    FREEROUNDS: [
+                        {
+                            CAMPAIGNID: [campaignId],
+                            ACTIVATIONID: [activationId],
+                            TOTALWIN: [0],
+                            CAMPAIGNVALUE: [1],
+                            REJECTABLE: [false],
+                            ENDDATE: [endDate],
+                            MESSAGES: [],
+                            OPTIONS: [{OPTION: [{BETLEVEL: [1], TOTALROUNDS: [1], REMAININGROUNDS: [0], FEATURE: [""]}]}],
+                        },
+                    ],
+                },
+            ],
+        });
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 99, SESSIONID: "session-id-3"});
+        const params3 = {key: launchParams3.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        await request(api).post("/rgs/test-rgs/authenticate").set(header(params3)).send(params3).expect(200);
+
+        // Verify new session does NOT have freeRounds (because numberOfBets was 0)
+        const session3 = await Session.findOneBy({playerId: player!.id, active: true});
+        expect(session3).toBeTruthy();
+        expect(session3!.sessionId).not.toEqual(session2!.sessionId);
+        expect(session3!.data?.freeRounds).toBeUndefined();
+    });
+    test("authenticate - does not recover freeRounds with mismatched activationId", async () => {
+        const {launchParams} = await launch();
+        const activationId = "test-activation-123";
+        const campaignId = "test-campaign-456";
+        const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+        // First authenticate with freeRounds promotion
+        queueMockWalletXMLResponse("getaccount", {
+            ACCOUNTID: 1234,
+            CURRENCY: "EUR",
+            COUNTRY: "SWE",
+            SESSIONID: "session-id-1",
+            PROMOTIONS: [
+                {
+                    FREEROUNDS: [
+                        {
+                            CAMPAIGNID: [campaignId],
+                            ACTIVATIONID: [activationId],
+                            TOTALWIN: [0],
+                            CAMPAIGNVALUE: [1],
+                            REJECTABLE: [false],
+                            ENDDATE: [endDate],
+                            MESSAGES: [],
+                            OPTIONS: [{OPTION: [{BETLEVEL: [1], TOTALROUNDS: [3], REMAININGROUNDS: [3], FEATURE: [""]}]}],
+                        },
+                    ],
+                },
+            ],
+        });
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 100, SESSIONID: "session-id-1"});
+        const params = {key: launchParams.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        await request(api).post("/rgs/test-rgs/authenticate").set(header(params)).send(params).expect(200);
+
+        const player = await Player.findOneBy({brand: "casino"});
+        expect(player).toBeTruthy();
+
+        // Accept freeRounds via /message endpoint
+        const messageParams = {
+            playerId: player!.id,
+            provider: "test-provider",
+            game: "test-game",
+            data: {type: "freeRounds", campaignId, activationId, optionData: {numberOfBets: 3, betAmount: 1}},
+        };
+        await request(api).post("/rgs/test-rgs/message").set(header(messageParams)).send(messageParams).expect(200);
+
+        // Verify session has freeRounds stored
+        const activeSession = await Session.findOneBy({playerId: player!.id, active: true});
+        expect(activeSession).toBeTruthy();
+        expect(activeSession!.data?.freeRounds?.activationId).toEqual(activationId);
+
+        // Re-authenticate with DIFFERENT activationId in promotion (new promotion started)
+        const {launchParams: launchParams2} = await launch();
+        const newActivationId = "different-activation-999";
+        queueMockWalletXMLResponse("getaccount", {
+            ACCOUNTID: 1234,
+            CURRENCY: "EUR",
+            COUNTRY: "SWE",
+            SESSIONID: "session-id-2",
+            PROMOTIONS: [
+                {
+                    FREEROUNDS: [
+                        {
+                            CAMPAIGNID: [campaignId],
+                            ACTIVATIONID: [newActivationId],
+                            TOTALWIN: [0],
+                            CAMPAIGNVALUE: [1],
+                            REJECTABLE: [false],
+                            ENDDATE: [endDate],
+                            MESSAGES: [],
+                            OPTIONS: [{OPTION: [{BETLEVEL: [1], TOTALROUNDS: [5], REMAININGROUNDS: [5], FEATURE: [""]}]}],
+                        },
+                    ],
+                },
+            ],
+        });
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 100, SESSIONID: "session-id-2"});
+        const params2 = {key: launchParams2.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        await request(api).post("/rgs/test-rgs/authenticate").set(header(params2)).send(params2).expect(200);
+
+        // Verify new session does NOT have freeRounds recovered (activationId mismatch)
+        const session2 = await Session.findOneBy({playerId: player!.id, active: true});
+        expect(session2).toBeTruthy();
+        expect(session2!.sessionId).not.toEqual(activeSession!.sessionId);
+        expect(session2!.data?.freeRounds).toBeUndefined();
     });
     test("balance", async () => {
         const {launchParams} = await launch();
@@ -659,6 +932,98 @@ describe("lnw wallet adapter", () => {
             ],
         });
     });
+    test("bet and win - sets walletCampaignId and campaignType for free rounds", async () => {
+        const {launchParams} = await launch();
+        const activationId = "test-activation-789";
+        const campaignId = "test-campaign-012";
+        const endDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+        // Authenticate with freeRounds promotion
+        queueMockWalletXMLResponse("getaccount", {
+            ACCOUNTID: 1234,
+            CURRENCY: "EUR",
+            COUNTRY: "SWE",
+            SESSIONID: "session-id",
+            PROMOTIONS: [
+                {
+                    FREEROUNDS: [
+                        {
+                            CAMPAIGNID: [campaignId],
+                            ACTIVATIONID: [activationId],
+                            TOTALWIN: [0],
+                            CAMPAIGNVALUE: [1],
+                            REJECTABLE: [false],
+                            ENDDATE: [endDate],
+                            MESSAGES: [],
+                            OPTIONS: [{OPTION: [{BETLEVEL: [1], TOTALROUNDS: [3], REMAININGROUNDS: [3], FEATURE: [""]}]}],
+                        },
+                    ],
+                },
+            ],
+        });
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 100, SESSIONID: "session-id"});
+        const authParams = {key: launchParams.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        await request(api).post("/rgs/test-rgs/authenticate").set(header(authParams)).send(authParams).expect(200);
+
+        const player = await Player.findOneBy({brand: "casino"});
+        expect(player).toBeTruthy();
+
+        // Accept freeRounds via /message endpoint
+        const messageParams = {
+            playerId: player!.id,
+            provider: "test-provider",
+            game: "test-game",
+            data: {type: "freeRounds", campaignId, activationId, optionData: {numberOfBets: 3, betAmount: 1}},
+        };
+        await request(api).post("/rgs/test-rgs/message").set(header(messageParams)).send(messageParams).expect(200);
+
+        // Make a bet (withdraw) transaction
+        const roundId = v4();
+        const wagerRgsTransactionId = v4();
+        const wagerParams = {
+            playerId: player!.id,
+            channel: "desktop",
+            rgsTransactionId: wagerRgsTransactionId,
+            amount: 1,
+            roundId,
+            category: "normal",
+            roundFinished: false,
+            type: "withdraw",
+            game: "test-game",
+            provider: "test-provider",
+        };
+        queueMockWalletXMLResponse("wager", {BALANCE: 99, SESSIONID: "session-id"});
+        await request(api).put("/rgs/test-rgs/transaction").set(header(wagerParams)).send(wagerParams).expect(200);
+
+        // Verify the wager transaction has walletCampaignId and campaignType set
+        const wagerTransaction = await Transaction.findOneBy({rgsTransactionId: wagerRgsTransactionId});
+        expect(wagerTransaction).toBeTruthy();
+        expect(wagerTransaction!.walletCampaignId).toEqual(campaignId);
+        expect(wagerTransaction!.campaignType).toEqual("freeBets");
+
+        // Make a result (deposit) transaction
+        const resultRgsTransactionId = v4();
+        const resultParams = {
+            playerId: player!.id,
+            channel: "desktop",
+            rgsTransactionId: resultRgsTransactionId,
+            amount: 2,
+            roundId,
+            category: "normal",
+            roundFinished: true,
+            type: "deposit",
+            game: "test-game",
+            provider: "test-provider",
+        };
+        queueMockWalletXMLResponse("result", {BALANCE: 101, SESSIONID: "session-id"});
+        await request(api).put("/rgs/test-rgs/transaction").set(header(resultParams)).send(resultParams).expect(200);
+
+        // Verify the result transaction also has walletCampaignId and campaignType set
+        const resultTransaction = await Transaction.findOneBy({rgsTransactionId: resultRgsTransactionId});
+        expect(resultTransaction).toBeTruthy();
+        expect(resultTransaction!.walletCampaignId).toEqual(campaignId);
+        expect(resultTransaction!.campaignType).toEqual("freeBets");
+    });
     test("credit api", async () => {
         const {launchParams} = await launch();
         await authenticate(launchParams);
@@ -738,10 +1103,177 @@ describe("lnw wallet adapter", () => {
         });
         expect(body).toEqual({balance: 1.23});
     });
+    test("launch real - currency alias per brand", async () => {
+        const {launchParams} = await launch({operatorid: brandWithCurrencyAlias, currency: walletCurrency});
+        queueMockWalletXMLResponse("getaccount", {ACCOUNTID: 1234, CURRENCY: walletCurrency.toUpperCase(), COUNTRY: "SWE", SESSIONID: "session-id"});
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 9.99, SESSIONID: "session-id"});
+        const params = {key: launchParams.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        const {body} = await request(api).post("/rgs/test-rgs/authenticate").set(header(params)).send(params).expect(200);
+
+        expect(queryStringToObject(mockedFetch.mock.calls[0][0])).toEqual({
+            ...standardRequest,
+            accountid: undefined,
+            currency: walletCurrency.toUpperCase(),
+            opid: brandWithCurrencyAlias,
+            lang: "en",
+            request: "getaccount",
+        });
+        expect(queryStringToObject(mockedFetch.mock.calls[1][0])).toEqual({
+            ...standardRequest,
+            currency: walletCurrency.toUpperCase(),
+            opid: brandWithCurrencyAlias,
+            request: "getbalance",
+        });
+        expect(body).toEqual({
+            balance: 9.99,
+            brand: brandWithCurrencyAlias,
+            currency: walletCurrencyAlias,
+            nativeId: `1234_${brandWithCurrencyAlias}`,
+            playerId: expect.any(String),
+            popups: [],
+            sessionData: {betConfig: {}, channel: "desktop", language: "en", sessionid: "session-id"},
+            sessionId: expect.any(String),
+        });
+    });
+    test("bet and win - currency alias per brand", async () => {
+        const {launchParams} = await launch({operatorid: brandWithCurrencyAlias, currency: walletCurrency});
+        queueMockWalletXMLResponse("getaccount", {ACCOUNTID: 1234, CURRENCY: walletCurrency.toUpperCase(), COUNTRY: "SWE", SESSIONID: "session-id"});
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 50, SESSIONID: "session-id"});
+        const authParams = {key: launchParams.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        await request(api).post("/rgs/test-rgs/authenticate").set(header(authParams)).send(authParams).expect(200);
+        const player = await Player.findOneBy({brand: brandWithCurrencyAlias});
+        expect(player).toBeTruthy();
+        const roundId = v4();
+        const params1 = {playerId: player!.id, channel: "desktop", rgsTransactionId: "alias-t1", amount: 1.5, roundId, category: "normal", roundFinished: false, type: "withdraw", game: "test-game", provider: "test-provider"};
+        queueMockWalletXMLResponse("wager", {BALANCE: 48.5, SESSIONID: "session-id"});
+        const res1 = await request(api).put("/rgs/test-rgs/transaction").set(header(params1)).send(params1).expect(200);
+
+        expect(queryStringToObject(mockedFetch.mock.calls[2][0])).toEqual({
+            ...standardRequest,
+            sessionid: "session-id",
+            opid: brandWithCurrencyAlias,
+            currency: walletCurrency.toUpperCase(),
+            request: "wager",
+            betamount: 1.5,
+            transactionid: expect.anything(),
+            roundid: expect.anything(),
+        });
+        expect(res1.body).toEqual({balance: 48.5});
+        await wait(100);
+
+        const params2 = {playerId: player!.id, channel: "desktop", rgsTransactionId: "alias-t2", amount: 6.5, roundId, category: "normal", roundFinished: true, type: "deposit", game: "test-game", provider: "test-provider"};
+        queueMockWalletXMLResponse("result", {BALANCE: 55, SESSIONID: "session-id"});
+        const res2 = await request(api).put("/rgs/test-rgs/transaction").set(header(params2)).send(params2).expect(200);
+
+        expect(queryStringToObject(mockedFetch.mock.calls[3][0])).toEqual({
+            ...standardRequest,
+            sessionid: "session-id",
+            opid: brandWithCurrencyAlias,
+            currency: walletCurrency.toUpperCase(),
+            request: "result",
+            wonamount: 6.5,
+            gamestatus: "completed",
+            transactionid: expect.anything(),
+            roundid: expect.anything(),
+        });
+        expect(res2.body).toEqual({balance: 55, popups: []});
+    });
+    test("launch real - currency alias global fallback", async () => {
+        const {launchParams} = await launch({operatorid: "non-alias-brand", currency: globalAliasCurrency, sessionid: "session-id-global"});
+        queueMockWalletXMLResponse("getaccount", {ACCOUNTID: 5678, CURRENCY: globalAliasCurrency.toUpperCase(), COUNTRY: "SWE", SESSIONID: "session-id-global"});
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 15.5, SESSIONID: "session-id-global"});
+        const params = {key: launchParams.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        const {body} = await request(api).post("/rgs/test-rgs/authenticate").set(header(params)).send(params).expect(200);
+
+        expect(queryStringToObject(mockedFetch.mock.calls[0][0])).toEqual({
+            ...standardRequest,
+            accountid: undefined,
+            currency: globalAliasCurrency.toUpperCase(),
+            opid: "non-alias-brand",
+            sessionid: "session-id-global",
+            lang: "en",
+            request: "getaccount",
+        });
+        expect(body).toEqual({
+            balance: 15.5,
+            brand: "non-alias-brand",
+            currency: globalAliasValue,
+            nativeId: `5678_non-alias-brand`,
+            playerId: expect.any(String),
+            popups: [],
+            sessionData: {betConfig: {}, channel: "desktop", language: "en", sessionid: "session-id-global"},
+            sessionId: expect.any(String),
+        });
+    });
+    test("bet and win - currency alias global fallback", async () => {
+        const {launchParams} = await launch({operatorid: "non-alias-brand-txn", currency: globalAliasCurrency, sessionid: "session-id-global-txn"});
+        queueMockWalletXMLResponse("getaccount", {ACCOUNTID: 9012, CURRENCY: globalAliasCurrency.toUpperCase(), COUNTRY: "SWE", SESSIONID: "session-id-global-txn"});
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 100, SESSIONID: "session-id-global-txn"});
+        const authParams = {key: launchParams.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        await request(api).post("/rgs/test-rgs/authenticate").set(header(authParams)).send(authParams).expect(200);
+        const player = await Player.findOneBy({brand: "non-alias-brand-txn"});
+        expect(player).toBeTruthy();
+        expect(player!.currency).toEqual(globalAliasValue);
+
+        const roundId = v4();
+        const params1 = {playerId: player!.id, channel: "desktop", rgsTransactionId: "global-alias-t1", amount: 2.5, roundId, category: "normal", roundFinished: false, type: "withdraw", game: "test-game", provider: "test-provider"};
+        queueMockWalletXMLResponse("wager", {BALANCE: 97.5, SESSIONID: "session-id-global-txn"});
+        const res1 = await request(api).put("/rgs/test-rgs/transaction").set(header(params1)).send(params1).expect(200);
+
+        expect(queryStringToObject(mockedFetch.mock.calls[2][0])).toEqual({
+            ...standardRequest,
+            accountid: 9012,
+            sessionid: "session-id-global-txn",
+            opid: "non-alias-brand-txn",
+            currency: globalAliasCurrency.toUpperCase(),
+            request: "wager",
+            betamount: 2.5,
+            transactionid: expect.anything(),
+            roundid: expect.anything(),
+        });
+        expect(res1.body).toEqual({balance: 97.5});
+        await wait(100);
+
+        const params2 = {playerId: player!.id, channel: "desktop", rgsTransactionId: "global-alias-t2", amount: 10, roundId, category: "normal", roundFinished: true, type: "deposit", game: "test-game", provider: "test-provider"};
+        queueMockWalletXMLResponse("result", {BALANCE: 107.5, SESSIONID: "session-id-global-txn"});
+        const res2 = await request(api).put("/rgs/test-rgs/transaction").set(header(params2)).send(params2).expect(200);
+
+        expect(queryStringToObject(mockedFetch.mock.calls[3][0])).toEqual({
+            ...standardRequest,
+            accountid: 9012,
+            sessionid: "session-id-global-txn",
+            opid: "non-alias-brand-txn",
+            currency: globalAliasCurrency.toUpperCase(),
+            request: "result",
+            wonamount: 10,
+            gamestatus: "completed",
+            transactionid: expect.anything(),
+            roundid: expect.anything(),
+        });
+        expect(res2.body).toEqual({balance: 107.5, popups: []});
+    });
+    test("currency alias priority - currencyAliasesPerBrand over currencyAliases", async () => {
+        const {launchParams} = await launch({operatorid: brandWithCurrencyAlias, currency: walletCurrency});
+        queueMockWalletXMLResponse("getaccount", {ACCOUNTID: 3456, CURRENCY: walletCurrency.toUpperCase(), COUNTRY: "SWE", SESSIONID: "session-id-priority"});
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 25, SESSIONID: "session-id-priority"});
+        const params = {key: launchParams.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        const {body} = await request(api).post("/rgs/test-rgs/authenticate").set(header(params)).send(params).expect(200);
+
+        expect(body.currency).toEqual(walletCurrencyAlias);
+    });
+    test("currency alias priority - currencyAliases fallback when brand not in currencyAliasesPerBrand", async () => {
+        const {launchParams} = await launch({operatorid: "other-brand", currency: walletCurrency});
+        queueMockWalletXMLResponse("getaccount", {ACCOUNTID: 7890, CURRENCY: walletCurrency.toUpperCase(), COUNTRY: "SWE", SESSIONID: "session-id-fallback"});
+        queueMockWalletXMLResponse("getbalance", {BALANCE: 30, SESSIONID: "session-id-fallback"});
+        const params = {key: launchParams.get("key"), wallet, operator: "test", provider: "test-provider", game: "test-game"};
+        const {body} = await request(api).post("/rgs/test-rgs/authenticate").set(header(params)).send(params).expect(200);
+
+        expect(body.currency).toEqual("eur-global");
+    });
     test("service api - getroundid - bet only", async () => {
         const {launchParams} = await launch();
         await authenticate(launchParams);
-        const player = await Player.findOneBy({});
+        const player = await Player.findOneBy({brand: "casino"});
         const roundId = v4();
         const rgsTransactionId = v4();
         //bet
@@ -789,7 +1321,7 @@ describe("lnw wallet adapter", () => {
     test("service api - getroundid - bet & win", async () => {
         const {launchParams} = await launch();
         await authenticate(launchParams);
-        const player = await Player.findOneBy({});
+        const player = await Player.findOneBy({brand: "casino"});
         const roundId = v4();
         //bet
         const params1 = {playerId: player!.id, channel: "desktop", rgsTransactionId: v4(), amount: 1.23, roundId, category: "normal", roundFinished: false, type: "withdraw", game: "test-game", provider: "test-provider"};
@@ -841,7 +1373,7 @@ describe("lnw wallet adapter", () => {
     test("service api - getrounds", async () => {
         const {launchParams} = await launch();
         await authenticate(launchParams);
-        const player = await Player.findOneBy({});
+        const player = await Player.findOneBy({brand: "casino"});
         const roundId = v4();
         //bet
         const params1 = {playerId: player!.id, channel: "desktop", rgsTransactionId: v4(), amount: 1.23, roundId, category: "normal", roundFinished: false, type: "withdraw", game: "test-game", provider: "test-provider"};
@@ -931,6 +1463,48 @@ describe("lnw wallet adapter", () => {
             },
         });
     });
+    test("service api - getbetlevels - currency alias per brand", async () => {
+        queueMockWalletResponse({data: {currencyList: [walletCurrencyAlias]}});
+        queueMockWalletResponse({
+            data: {
+                availableBetsBulk: {
+                    bets: {
+                        "test-game": {
+                            [walletCurrencyAlias]: ["1", "2"],
+                        },
+                    },
+                },
+            },
+        });
+        const params = {loginname: walletConfig.username, password: walletConfig.password, request: "getbetlevels", gpgameid: "test-game", opid: brandWithCurrencyAlias};
+        const searchParams = new URLSearchParams(params).toString();
+        const response = await request(api).get(`/wallet/lnw-wallet/service-api/?${searchParams}`).expect(200);
+        const {variables} = JSON.parse(mockedFetch.mock.calls[1][1]!.body as string);
+        const json = await parseStringPromise(response.text, {valueProcessors: [parseNumbers]});
+
+        expect(variables.currencies).toEqual([walletCurrencyAlias]);
+        expect(variables.brand).toEqual(brandWithCurrencyAlias);
+        expect(json).toEqual({
+            RSP: {
+                $: {rc: "0", request: "getbetlevels"},
+                APIVERSION: [1.5],
+                GAMES: [
+                    {
+                        GAME: [
+                            {
+                                $: {gamechoice: "false", gpgameid: "test-game", playerchoice: "2"},
+                                BETLEVELS: [
+                                    {
+                                        BETLEVEL: [{$: {currency: walletCurrencyAlias.toUpperCase(), values: "1,2"}}],
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                ],
+            },
+        });
+    });
     test("service api - getcriticalfiles", async () => {
         queueMockWalletResponse({
             data: {
@@ -993,7 +1567,7 @@ describe("lnw wallet adapter", () => {
             request: "getchecksumreport",
             jurisdiction: "it",
             opid: "casino",
-            algorithmttype: "NGI_SHA1",
+            algorithmtype: "NGI_SHA1",
         };
         const searchParams = new URLSearchParams(params).toString();
         const response = await request(api).get(`/wallet/lnw-wallet/service-api/?${searchParams}`).expect(200);
@@ -1071,7 +1645,7 @@ describe("lnw wallet adapter", () => {
             request: "getchecksumreport",
             jurisdiction: "uk",
             opid: "casino",
-            algorithmttype: "NGI_SHA1",
+            algorithmtype: "NGI_SHA1",
         };
         const searchParams = new URLSearchParams(params).toString();
         const response = await request(api).get(`/wallet/lnw-wallet/service-api/?${searchParams}`).expect(200);

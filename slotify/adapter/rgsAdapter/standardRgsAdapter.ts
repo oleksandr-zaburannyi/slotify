@@ -9,12 +9,16 @@ import Exception from "@slotify/shared/lib/Exception";
 import {URLSearchParams} from "url";
 import {Game} from "../db/model/Game";
 import {getRoundId} from "../util/ids";
+import * as crypto from "crypto";
+import {fetchAndParse} from "@slotify/shared/lib/fetch";
+import {cancelCampaign, createCampaign, getAvailableBetsBulk, getCampaignByName} from "../util/external";
 
 interface IConfig {
     secretKey: string;
     realUrl?: string;
     funUrl?: string;
     replayUrl?: string;
+    freeBetsUrl?: string;
 }
 
 const getLaunchUrl = (mode: string, config: IConfig): string | undefined => {
@@ -30,14 +34,14 @@ const getLaunchUrl = (mode: string, config: IConfig): string | undefined => {
     }
 };
 
-const adapter: IRgsAdapter = {
-    init: function init(rgs, api, basePath, config: IConfig) {
+const adapter: IRgsAdapter<IConfig> = {
+    init: function init(rgs, router, config) {
         if (!config.secretKey) {
-            throw new Error(`Secret key not specified for ${basePath}`);
+            throw new Error(`Secret key not specified for RGS ${rgs}`);
         }
 
-        api.post(
-            basePath + "/authenticate",
+        router.post(
+            "/authenticate",
             hmac(config.secretKey),
             validate([
                 body("wallet").isString().exists().isLength({max: 255}),
@@ -53,13 +57,14 @@ const adapter: IRgsAdapter = {
             ]),
             async (req, res) => {
                 const {wallet, operator, key, game, provider, ip, channel} = req.body;
-                const ipBlockHeader = req.get("ip-blocked-country") === "true";
-                res.json(await proxy.authenticate(wallet, operator, key, provider, await Game.fromRgs(rgs, game), ip, ipBlockHeader, channel));
+                const ipCountry = req.get("X-IP-Country");
+                const ipRegion = req.get("X-IP-Region");
+                res.json(await proxy.authenticate(wallet, operator, key, provider, await Game.fromRgs(rgs, game), ip, ipCountry, ipRegion, channel));
             },
         );
 
-        api.put(
-            basePath + "/transaction",
+        router.put(
+            "/transaction",
             hmac(config.secretKey),
             validate([
                 body("playerId").isString().exists().isUUID(4),
@@ -76,6 +81,7 @@ const adapter: IRgsAdapter = {
                 body("name").isString().optional().isLength({max: 255}),
                 body("campaignType").isString().optional().isLength({max: 255}),
                 body("campaignId").isString().optional().isLength({max: 255}),
+                body("walletCampaignId").isString().optional().isLength({max: 255}),
                 body("campaignData").optional({nullable: true}).isObject(),
                 body("roundFinished").isBoolean().optional(),
                 body("winRatio").optional({nullable: true}).isFloat(),
@@ -98,6 +104,7 @@ const adapter: IRgsAdapter = {
                     name,
                     campaignType,
                     campaignId,
+                    walletCampaignId,
                     campaignData,
                     roundFinished,
                     channel,
@@ -119,6 +126,7 @@ const adapter: IRgsAdapter = {
                     name,
                     campaignType,
                     campaignId,
+                    walletCampaignId,
                     campaignData,
                     roundFinished,
                     winRatio,
@@ -134,8 +142,8 @@ const adapter: IRgsAdapter = {
             },
         );
 
-        api.get(
-            basePath + "/balance",
+        router.get(
+            "/balance",
             hmac(config.secretKey),
             validate([query("playerId").isUUID(4).exists(), query("provider").isString().exists().isLength({max: 255}), query("game").isString().isLength({max: 255}).exists()]),
             async (req, res) => {
@@ -144,8 +152,8 @@ const adapter: IRgsAdapter = {
             },
         );
 
-        api.delete(
-            basePath + "/cancel",
+        router.delete(
+            "/cancel",
             hmac(config.secretKey),
             validate([body("roundId").isString().optional({nullable: true}).isLength({max: 255}), body("rgsTransactionId").isString().optional({nullable: true}).isLength({max: 255}), body("auto").optional({nullable: true}).isBoolean()]),
             async (req, res) => {
@@ -165,8 +173,8 @@ const adapter: IRgsAdapter = {
             },
         );
 
-        api.post(
-            basePath + "/message",
+        router.post(
+            "/message",
             hmac(config.secretKey),
             validate([body("playerId").isUUID(4).exists(), body("provider").isString().exists().isLength({max: 255}), body("game").isString().isLength({max: 255}).exists(), body("data").isObject().exists()]),
             async (req, res) => {
@@ -175,7 +183,7 @@ const adapter: IRgsAdapter = {
             },
         );
     },
-    launch: async (mode, config: IConfig, params, req) => {
+    launch: async (mode, config, params, req) => {
         let url = getLaunchUrl(mode, config);
 
         if (url === undefined) {
@@ -185,7 +193,7 @@ const adapter: IRgsAdapter = {
 
         if (url.includes("${hostname}")) {
             const hostname = req ? req.hostname : new URL(process.env.URL!).hostname;
-            url = url.replace(/\$\{hostname}/g, hostname);
+            url = url.replace(/\$\{hostname}/g, params.hostname || hostname);
         }
 
         for (const key in params) {
@@ -207,6 +215,57 @@ const adapter: IRgsAdapter = {
         }
 
         return `${baseUrl}?${urlParams.toString()}`;
+    },
+
+    addFreeBets: async (request, config, wallet) => {
+        if (config.freeBetsUrl) {
+            const body = JSON.stringify(request);
+            const headers = {
+                "Content-Type": "application/json",
+                "X-Server-Authorization": crypto.createHmac("sha256", config.secretKey).update(body).digest("hex"),
+            };
+            return await fetchAndParse(config.freeBetsUrl + "/freeBets/add", {method: "POST", body, headers, timeout: 45 * 1000}, 0);
+        }
+
+        const {walletCampaignId, bets, amount, currency, ...reminder} = request;
+        await createCampaign({
+            wallets: [wallet],
+            walletCampaignId,
+            name: wallet + "_" + walletCampaignId,
+            type: "freeBets",
+            config: {bets, amount, currency},
+            ...reminder,
+        });
+
+        return {success: true};
+    },
+
+    removeFreeBets: async (walletCampaignId: string, config, wallet) => {
+        if (config.freeBetsUrl) {
+            const body = JSON.stringify({walletCampaignId});
+            const headers = {
+                "Content-Type": "application/json",
+                "X-Server-Authorization": crypto.createHmac("sha256", config.secretKey).update(body).digest("hex"),
+            };
+            return await fetchAndParse(config.freeBetsUrl + "/freeBets/remove", {method: "POST", body, headers, timeout: 45 * 1000}, 0);
+        }
+
+        const campaign = await getCampaignByName(wallet + "_" + walletCampaignId);
+        await cancelCampaign(campaign!.campaignId!);
+        return {success: true};
+    },
+
+    availableBets: async ({games, currencies}, config, wallet) => {
+        if (config.freeBetsUrl) {
+            const body = JSON.stringify({games, currencies});
+            const headers = {
+                "Content-Type": "application/json",
+                "X-Server-Authorization": crypto.createHmac("sha256", config.secretKey).update(body).digest("hex"),
+            };
+            return await fetchAndParse(config.freeBetsUrl + "/freeBets/availableBets", {method: "POST", body, headers, timeout: 45 * 1000}, 0);
+        }
+
+        return getAvailableBetsBulk({wallet, games, currencies});
     },
 };
 export default adapter;

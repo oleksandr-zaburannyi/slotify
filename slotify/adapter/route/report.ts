@@ -50,6 +50,8 @@ export async function players(sort: ISort | undefined, filter: IFilter[] = [], l
         {alias: "brand", sql: "player.brand", filters: ["IN", "LIKE", "EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
         {alias: "group", sql: "player.group", filters: ["IN", "LIKE", "EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL"]},
         {alias: "blocked", sql: "player.blocked", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
+        {alias: "excludedFromInspection", sql: `(SELECT excluded FROM (${ReportExclusion.EXCLUSION_CHECK_SQL("player.id", "player.operator", "player.brand", "NOW()", "inspection")}) _e1)`, filters: ["EQUAL"]},
+        {alias: "excludedFromReports", sql: `(SELECT excluded FROM (${ReportExclusion.EXCLUSION_CHECK_SQL("player.id", "player.operator", "player.brand", "NOW()", "gameWin")}) _e2)`, filters: ["EQUAL"]},
     ];
 
     account.wallets && filter?.push({field: "wallet", type: "IN", value: account.wallets});
@@ -171,8 +173,9 @@ export async function wallets(sort: ISort | undefined, filter: IFilter[] = [], l
         {alias: "config", sql: "wallet.config", filters: [], sort: false},
         {alias: "inspectionConfig", sql: "wallet.inspectionConfig", filters: [], sort: false},
         {alias: "oneTimeKeyBlocked", sql: "wallet.oneTimeKeyBlocked", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
-        {alias: "ipBlocked", sql: "wallet.ipBlocked", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
-        {alias: "geoIpBlocked", sql: "wallet.geoIpBlocked", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
+        {alias: "ipBlockedCountries", sql: "wallet.ipBlockedCountries", filters: ["IN", "EQUAL", "NOT_EQUAL"], type: "json"},
+        {alias: "ipBlockedRegions", sql: "wallet.ipBlockedRegions", filters: ["IN", "EQUAL", "NOT_EQUAL"], type: "json"},
+        {alias: "apiBlockedCountries", sql: "wallet.apiBlockedCountries", filters: ["IN", "EQUAL", "NOT_EQUAL"], type: "json"},
         {alias: "ips", sql: "wallet.ips", filters: [], sort: false},
         {alias: "parallelTransactions", sql: "wallet.parallelTransactions", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
     ];
@@ -213,7 +216,8 @@ export async function reportReceivers(sort: ISort | undefined, filter: IFilter[]
         {alias: "report", sql: "report.report", filters: ["EQUAL", "NOT_EQUAL", "LIKE"]},
         {alias: "account", sql: "report.account", filters: ["IN", "EQUAL", "NOT_EQUAL", "LIKE"]},
         {alias: "email", sql: "report.email", filters: ["IN", "EQUAL", "NOT_EQUAL", "LIKE"]},
-        {alias: "variables", sql: "report.variables", filters: ["EQUAL", "NOT_EQUAL", "LIKE"]},
+        {alias: "sftp", sql: "report.sftp", filters: ["LIKE"], type: "json"},
+        {alias: "variables", sql: "report.variables", filters: ["LIKE"], type: "json"},
         {alias: "comment", sql: "report.comment"},
     ];
 
@@ -237,8 +241,8 @@ export async function reportExclusion(sort: ISort | undefined, filter: IFilter[]
         {alias: "currency", sql: "reportExclusion.currency", filters: ["EQUAL", "NOT_EQUAL", "LIKE"]},
         {alias: "inspection", sql: "reportExclusion.inspection", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
         {alias: "gameWin", sql: "reportExclusion.gameWin", filters: ["IN", "EQUAL", "NOT_EQUAL"]},
-        {alias: "comment", sql: "reportExclusion.comment"},
-        {alias: "reason", sql: "reportExclusion.reason"},
+        {alias: "comment", sql: "reportExclusion.comment", filters: ["EQUAL", "NOT_EQUAL", "LIKE"]},
+        {alias: "reason", sql: "reportExclusion.reason", filters: ["EQUAL", "NOT_EQUAL", "LIKE"]},
     ];
 
     account.wallets && filter.push({field: "wallet", type: "CONTAIN", value: account.wallets});
@@ -276,6 +280,8 @@ export async function transactions(sort: ISort | undefined, filter: IFilter[] = 
         {alias: "channel", sql: "transaction.channel", filters: ["EQUAL", "NOT_EQUAL", "IN", "NULL", "NOT_NULL", "LIKE"]},
         {alias: "campaignType", sql: "transaction.campaignType", filters: ["EQUAL", "NOT_EQUAL", "IN"]},
         {alias: "campaignId", sql: "transaction.campaignId", filters: ["EQUAL", "NOT_EQUAL"], type: "uuid"},
+        {alias: "walletCampaignId", sql: "transaction.walletCampaignId", filters: ["EQUAL", "NOT_EQUAL"]},
+        {alias: "campaignData", sql: "transaction.campaignData"},
         {alias: "ip", sql: "transaction.ip", filters: ["EQUAL", "NOT_EQUAL"]},
         {alias: "winRatio", sql: `transaction.winRatio`, filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL", "EQUAL", "NOT_EQUAL"]},
         {alias: "balanceAfter", sql: `transaction.balanceAfter / NULLIF(${rate}, 0)`, filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL", "EQUAL", "NOT_EQUAL"]},
@@ -446,15 +452,10 @@ export async function DGE_gameSummary(sort: ISort | undefined, filter: IFilter[]
         {alias: "brand", sql: "player.brand", group: true, filters: ["IN", "EQUAL", "NOT_EQUAL", "NULL", "NOT_NULL", "LIKE"]},
     ];
     const columnsBetWin: IColumn[] = [
-        {alias: "bets", sql: "count(case when type = 'withdraw' then 1 end)"},
-        {alias: "wins", sql: "count(case when type = 'deposit' then 1 end)"},
         {alias: "totalBet", sql: `sum(case when type = 'withdraw' then amount else 0 end)`},
         {alias: "totalWin", sql: `sum(case when type = 'deposit' then amount else 0 end)`},
     ];
-    const columnsCancel: IColumn[] = [
-        {alias: "wins", sql: "count(case when type = 'withdraw' then 1 end)", filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"]},
-        {alias: "totalWin", sql: `sum(case when type = 'withdraw' then amount else 0 end)`, filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"]},
-    ];
+    const columnsCancel: IColumn[] = [{alias: "totalWin", sql: `sum(case when type = 'withdraw' then amount else 0 end)`, filters: ["GREATER", "GREATER_OR_EQUAL", "LOWER", "LOWER_OR_EQUAL"]}];
 
     const {start, end} = getPreviousDayInTimezone(options?.timestamp || Date.now(), "America/New_York");
     const filterBet: IFilter[] = [
@@ -497,18 +498,19 @@ export async function DGE_gameSummary(sort: ISort | undefined, filter: IFilter[]
             return true;
         });
         if (item) {
-            item.wins = round(parseInt(item.wins, 10) + parseInt(cancel.wins, 10), 0);
             item.totalWin = round(parseFloat(item.totalWin) + parseFloat(cancel.totalWin), 2);
         } else {
-            item = {...cancel, bets: 0, totalBet: 0};
+            item = {...cancel, totalBet: 0};
             items.push(item);
         }
     }
 
     for (const item of items) {
         item.gameWin = round(parseFloat(item.totalBet) - parseFloat(item.totalWin), 2);
-        item.from = start;
-        item.to = end;
+        const dateObj = new Date(start!);
+        item.date = `${String(dateObj.getMonth() + 1).padStart(2, "0")}/${String(dateObj.getDate()).padStart(2, "0")}/${dateObj.getFullYear()}`; //format mm/dd/yyyy
+        delete item.wallet;
+        delete item.operator;
     }
     return {items};
 }

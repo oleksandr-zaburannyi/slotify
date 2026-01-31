@@ -11,6 +11,7 @@ The key words `MUST`, `MUST NOT`, `REQUIRED`, `SHALL`, `SHALL NOT`, `SHOULD`, `S
 To start using the library you `MUST` load it via `<script>` tag.
 
 ```html
+
 <script src="/slotify/connector/connector.js"></script>
 ```
 
@@ -48,7 +49,7 @@ Important: DO NOT import code from npm library. It should be used only for types
 All fields are `OPTIONAL`. If they are not explicitly provided in the object then the library tries to read it from URL parameters of the same name.
 
 | name                   | type     | example             | description                                                                                          |
-| ---------------------- | -------- | ------------------- | ---------------------------------------------------------------------------------------------------- |
+|------------------------|----------|---------------------|------------------------------------------------------------------------------------------------------|
 | `provider`             | `string` | `slotProvider`      | Name of the provider                                                                                 |
 | `wallet`               | `string` | `someWallet`        | Name of the wallet                                                                                   |
 | `operator`             | `string` | `someOperator`      | Name of the operator                                                                                 |
@@ -64,7 +65,7 @@ All fields are `OPTIONAL`. If they are not explicitly provided in the object the
 Callbacks `freezeBet`, `unfreezeBet`, `stopAutoplay`, `balanceChanged` are used by in game promo tools UI. The rest is typically required by some custom integrations.
 
 | name              | type       | example                                                                                      | description                                                             |
-| ----------------- | ---------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+|-------------------|------------|----------------------------------------------------------------------------------------------|-------------------------------------------------------------------------|
 | `mute`            | `function` | `() => null`                                                                                 | Mute the sound                                                          |
 | `unmute`          | `function` | `() => null`                                                                                 | Unmute the sound                                                        |
 | `turboToggle`     | `function` | `(value) => null`                                                                            | Toggle turbo capability                                                 |
@@ -86,7 +87,7 @@ Callbacks `freezeBet`, `unfreezeBet`, `stopAutoplay`, `balanceChanged` are used 
 #### Theme
 
 | name                     | type     | example            | description              |
-| ------------------------ | -------- | ------------------ | ------------------------ |
+|--------------------------|----------|--------------------|--------------------------|
 | `fontFamily`             | `string` | `Helvetica`        | Font family              |
 | `backgroundColor`        | `string` | `black`            | Background color         |
 | `primaryColor`           | `string` | `#rgb(20, 20, 20)` | Primary color            |
@@ -98,7 +99,7 @@ Callbacks `freezeBet`, `unfreezeBet`, `stopAutoplay`, `balanceChanged` are used 
 #### Features
 
 | name       | type      | example | description                    |
-| ---------- | --------- | ------- | ------------------------------ |
+|------------|-----------|---------|--------------------------------|
 | `mute`     | `boolean` | `true`  | Game has mute capabilities     |
 | `turbo`    | `boolean` | `true`  | Game has turbo capabilities    |
 | `paytable` | `boolean` | `true`  | Game has paytable capabilities |
@@ -138,7 +139,7 @@ Authenticates a _Player_ and starts a new session.
 **Returns**
 
 | Name               | Type     | Required   | Example       | Description                                    |
-|--------------------| -------- | ---------- |---------------|------------------------------------------------|
+|--------------------|----------|------------|---------------|------------------------------------------------|
 | `balance`          | `number` | `REQUIRED` | `123.45`      | Balance in _Player's_ currency                 |
 | `currency`         | `string` | `REQUIRED` | `eur`         | _Player's_ currency (internal platform code)   |
 | `currencySymbol`   | `string` | `REQUIRED` | `eur`         | _Player's_ currency (to display to the player) |
@@ -162,7 +163,7 @@ Creates a new wager.
 **Arguments**
 
 | Name            | Type      |            | Example         | Description                                                                                                                                                            |
-| --------------- | --------- | ---------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-----------------|-----------|------------|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `action`        | `string`  | `REQUIRED` | `gamble`        | Action                                                                                                                                                                 |
 | `bet`           | `number`  | `OPTIONAL` | `2.58`          | Cash bet in player's currency. It `SHOULD NOT` have more then 2 decimal places, otherwise it will be rounded using bankers rounding. Required only in the initial play |
 | `params`        | `any`     | `OPTIONAL` | `{myValue:123}` | Extra params passed to the game server                                                                                                                                 |
@@ -174,7 +175,7 @@ Creates a new wager.
 **Returns**
 
 | Name                 | Type     |            | Example                                | Description                                                                                        |
-| -------------------- | -------- | ---------- | -------------------------------------- | -------------------------------------------------------------------------------------------------- |
+|----------------------|----------|------------|----------------------------------------|----------------------------------------------------------------------------------------------------|
 | `wager`              | `object` | `REQUIRED` |                                        | [See PlayWager](#PlayWager)                                                                        |
 | `balance`            | `number` | `OPTIONAL` | `200.56`                               | Player's current balance in player's currency, sent only in initial play                           |
 | `roundId`            | `string` | `REQUIRED` | `c5b0c931-3971-4143-a478-15803f7837cc` | Round id                                                                                           |
@@ -196,13 +197,13 @@ Completes the round and pays the win to player's account.
 **Arguments**
 
 | Name       | Type      |            | Example | Description                                                                                                                    |
-| ---------- | --------- | ---------- | ------- | ------------------------------------------------------------------------------------------------------------------------------ |
+|------------|-----------|------------|---------|--------------------------------------------------------------------------------------------------------------------------------|
 | `asyncWin` | `boolean` | `OPTIONAL` | `true`  | If `true`, it automatically the system does NOT wait for the response so returned balance will be based on last bet + finalWin |
 
 **Returns**
 
 | Name       | Type     |            | Example  | Description                                                                       |
-| ---------- | -------- | ---------- | -------- | --------------------------------------------------------------------------------- |
+|------------|----------|------------|----------|-----------------------------------------------------------------------------------|
 | `balance`  | `number` | `OPTIONAL` | `200.56` | Player's current balance in player's currency, sent only if `asyncWin` is `false` |
 | `finalWin` | `number` | `REQUIRED` | `200.56` | Total win of the round (with potential win capping applied)                       |
 
@@ -221,13 +222,13 @@ Returns game configuration and other information.
 **Arguments**
 
 | Name     | Type     |            | Example                                | Description                    |
-| -------- | -------- | ---------- | -------------------------------------- | ------------------------------ |
+|----------|----------|------------|----------------------------------------|--------------------------------|
 | `roomId` | `string` | `OPTIONAL` | `df3d02ab-c6f5-4152-bbc3-9107e1f9bc7c` | Room Id - only for multiplayer |
 
 **Returns**
 
 | Name        | Type     | Required   | Example                                       | Description                                        |
-| ----------- | -------- | ---------- | --------------------------------------------- | -------------------------------------------------- |
+|-------------|----------|------------|-----------------------------------------------|----------------------------------------------------|
 | `config`    | `any`    | `OPTIONAL` | `{paytable: {...}}`                           | Game config                                        |
 | `bets`      | `any`    | `OPTIONAL` | `{main: {...}, gamble: {...}}`                | Bet config per action. [See BetConfig](#BetConfig) |
 | `state`     | `any`    | `OPTIONAL` | `{collection: 10}`                            | Player's game state                                |
@@ -249,13 +250,13 @@ Displays popup informing about unfinished rounds. If a player wishes to see the 
 **Arguments**
 
 | Name        | Type      |            | Example | Description                                          |
-| ----------- | --------- | ---------- | ------- | ---------------------------------------------------- |
+|-------------|-----------|------------|---------|------------------------------------------------------|
 | `skipPopup` | `boolean` | `OPTIONAL` | true    | Indicates if you want to skip popup and get raw data |
 
 **Returns**
 
 | Name      | Type     |            | Example  | Description                                                 |
-| --------- | -------- | ---------- | -------- | ----------------------------------------------------------- |
+|-----------|----------|------------|----------|-------------------------------------------------------------|
 | `.`       | `Round`  | `OPTIONAL` | -        | Unfinished round [See Round](#round)                        |
 | `balance` | `number` | `OPTIONAL` | `100.24` | _Player's_ balance (only if players selects "SKIP" on popup |
 
@@ -274,13 +275,13 @@ Returns feed stored by the game. For example might represent roulette's hot numb
 **Arguments**
 
 | Name     | Type     |            | Example | Description                               |
-| -------- | -------- | ---------- | ------- | ----------------------------------------- |
+|----------|----------|------------|---------|-------------------------------------------|
 | `amount` | `number` | `REQUIRED` | 3       | Amount of recent wagers entries to return |
 
 **Returns**
 
 | Name   | Type    |            | Example     | Description                              |
-| ------ | ------- | ---------- | ----------- | ---------------------------------------- |
+|--------|---------|------------|-------------|------------------------------------------|
 | `feed` | `any[]` | `REQUIRED` | `[1, 3, 4]` | Feed stored by the game, eg. hot numbers |
 
 ---
@@ -300,7 +301,7 @@ None.
 **Returns**
 
 | Name     | Type       |            | Example                                           | Description                   |
-| -------- | ---------- | ---------- | ------------------------------------------------- | ----------------------------- |
+|----------|------------|------------|---------------------------------------------------|-------------------------------|
 | `cheats` | `string[]` | `REQUIRED` | `{main: ["win", "bonus"], bonus: ["retrigger"] }` | Cheats available per `action` |
 
 ---
@@ -318,13 +319,13 @@ Displays popup with round summary and return it if a player wishes to watch it.
 **Arguments**
 
 | Name      | Type     |            | Example                                | Description |
-| --------- | -------- | ---------- | -------------------------------------- | ----------- |
+|-----------|----------|------------|----------------------------------------|-------------|
 | `roundId` | `string` | `REQUIRED` | `db76b227-0582-45bc-a2cd-fbf38449f28e` | Round Id    |
 
 **Returns**
 
 | Name    | Type          |            | Example | Description                     |
-| ------- | ------------- | ---------- | ------- | ------------------------------- |
+|---------|---------------|------------|---------|---------------------------------|
 | `{...}` | `ReplayRound` | `REQUIRED` |         | [See ReplayRound](#replayround) |
 
 ---
@@ -342,14 +343,14 @@ Returns URL for the replay
 **Arguments**
 
 | Name      | Type     |            | Example                                | Description |
-| --------- | -------- | ---------- | -------------------------------------- | ----------- |
+|-----------|----------|------------|----------------------------------------|-------------|
 | `roundId` | `string` | `REQUIRED` | `db76b227-0582-45bc-a2cd-fbf38449f28e` | Round Id    |
 | `game`    | `string` | `REQUIRED` | `my-game`                              | Game Id     |
 
 **Returns**
 
 | Name | Type     |            | Example                                                 | Description |
-| ---- | -------- | ---------- | ------------------------------------------------------- | ----------- |
+|------|----------|------------|---------------------------------------------------------|-------------|
 | `.`  | `string` | `REQUIRED` | `https://domain.com/launch/replay?roundId=XXX&game=YYY` | Replay URL  |
 
 ---
@@ -370,7 +371,7 @@ None.
 **Returns**
 
 | Name      | Type     |            | Example  | Description                  |
-| --------- | -------- | ---------- | -------- | ---------------------------- |
+|-----------|----------|------------|----------|------------------------------|
 | `balance` | `number` | `REQUIRED` | `123.45` | Balance in player's currency |
 
 ---
@@ -444,7 +445,7 @@ Shows the game history popup.
 **Arguments**
 
 | Name             | Type                         |            | Example | Description                                                                              |
-| ---------------- | ---------------------------- | ---------- | ------- | ---------------------------------------------------------------------------------------- |
+|------------------|------------------------------|------------|---------|------------------------------------------------------------------------------------------|
 | `skipPopup`      | `false`                      | `OPTIONAL` | -       | Indicates if you want to skip popup and get raw data                                     |
 | `showWatch`      | `true`                       | `OPTIONAL` | -       | Indicates if you want to display "WATCH" button which enables replays                    |
 | `show`           | `(replay:ReplayRound)=>null` | `OPTIONAL` | -       | Callback to open a replay of particular round. [See ReplayRound](#replayround)           |
@@ -456,7 +457,7 @@ Shows the game history popup.
 **Returns**
 
 | Name | Type                 |            | Example | Description                               |
-| ---- | -------------------- | ---------- | ------- | ----------------------------------------- |
+|------|----------------------|------------|---------|-------------------------------------------|
 | `.`  | `GameHistoryRound[]` | `REQUIRED` |         | [See GameHistoryRound](#GameHistoryRound) |
 
 ---
@@ -477,7 +478,7 @@ Initializes Reality Check window.
 **Arguments**
 
 | Name            | Type      |            | Example | Description                                                                          |
-| --------------- | --------- | ---------- | ------- | ------------------------------------------------------------------------------------ |
+|-----------------|-----------|------------|---------|--------------------------------------------------------------------------------------|
 | `onOpen`        | `()=>any` | `OPTIONAL` | -       | Callback for opening the popup                                                       |
 | `onContinue`    | `()=>any` | `OPTIONAL` | -       | Callback for pressing continue button.                                               |
 | `onGameHistory` | `()=>any` | `OPTIONAL` | -       | Callback for pressing game history button. If not passed the button is not displayed |
@@ -517,7 +518,7 @@ Changes Promo UI's style - used to improve game logo visibility.
 **Arguments**
 
 | Name           | Type         |            | Example | Description                       |
-| -------------- | ------------ | ---------- | ------- | --------------------------------- |
+|----------------|--------------|------------|---------|-----------------------------------|
 | `promoUIStyle` | PromoUIStyle | `REQUIRED` | -       | [See PromoUIStyle](#PromoUIStyle) |
 
 **Returns**
@@ -540,7 +541,7 @@ Used by the Connector to inform integrated operators bridges on that event.
 **Arguments**
 
 | Name  | Type     | Example | Description      |
-| ----- | -------- | ------- | ---------------- |
+|-------|----------|---------|------------------|
 | `bet` | `number` | `1.23`  | active bet value |
 
 **Returns**
@@ -616,7 +617,7 @@ Used by the Connector to inform integrated operators bridges on that event.
 **Arguments**
 
 | Name    | Type      | Example | Description  |
-| ------- | --------- | ------- | ------------ |
+|---------|-----------|---------|--------------|
 | `value` | `boolean` | `true`  | toggle value |
 
 **Returns**
@@ -638,7 +639,7 @@ Used by the Connector to inform integrated operators bridges on that event.
 **Arguments**
 
 | Name    | Type      | Example | Description  |
-| ------- | --------- | ------- | ------------ |
+|---------|-----------|---------|--------------|
 | `value` | `boolean` | `true`  | toggle value |
 
 **Returns**
@@ -660,7 +661,7 @@ Used by the Connector to inform integrated operators bridges on that event.
 **Arguments**
 
 | Name    | Type      | Example | Description  |
-| ------- | --------- | ------- | ------------ |
+|---------|-----------|---------|--------------|
 | `value` | `boolean` | `true`  | toggle value |
 
 **Returns**
@@ -682,7 +683,7 @@ Used by the Connector to inform integrated operators bridges on that event.
 **Arguments**
 
 | Name    | Type      | Example | Description  |
-| ------- | --------- | ------- | ------------ |
+|---------|-----------|---------|--------------|
 | `value` | `boolean` | `true`  | toggle value |
 
 **Returns**
@@ -704,7 +705,7 @@ Used by the Connector to inform integrated operators bridges on that event.
 **Arguments**
 
 | Name    | Type      | Example | Description  |
-| ------- | --------- | ------- | ------------ |
+|---------|-----------|---------|--------------|
 | `value` | `boolean` | `true`  | toggle value |
 
 ---
@@ -725,7 +726,7 @@ No arguments.
 **Returns**
 
 | Name | Type     |            | Example | Description                            |
-| ---- | -------- | ---------- | ------- | -------------------------------------- |
+|------|----------|------------|---------|----------------------------------------|
 | `.`  | `Room[]` | `REQUIRED` |         | Available rooms. See [See Room](#Room) |
 
 ---
@@ -745,7 +746,7 @@ Supported types and payloads are game specific.
 **Arguments**
 
 | Name             | Type               | Example | Description                                     |
-| ---------------- | ------------------ | ------- | ----------------------------------------------- |
+|------------------|--------------------|---------|-------------------------------------------------|
 | `channel`        | `string`           | `abcd`  | roomId                                          |
 | `onConnected`    | `() => any`        |         | handler triggered when connetion is established |
 | `onDisconnected` | `() => any`        |         | handler triggered when connection is closed     |
@@ -754,7 +755,7 @@ Supported types and payloads are game specific.
 **Returns**
 
 | Name   | Type                                                 |            | Example | Description                            |
-| ------ | ---------------------------------------------------- | ---------- | ------- | -------------------------------------- |
+|--------|------------------------------------------------------|------------|---------|----------------------------------------|
 | `send` | `(type: "command" \| "cheat", payload: any) => void` | `REQUIRED` |         | Method used to send websocket messages |
 
 ## Types
@@ -762,7 +763,7 @@ Supported types and payloads are game specific.
 ### ReplayRound
 
 | Name               | Type     |            | Example                        | Description                                        |
-| ------------------ | -------- | ---------- | ------------------------------ | -------------------------------------------------- |
+|--------------------|----------|------------|--------------------------------|----------------------------------------------------|
 | `send`             | `Round`  | `OPTIONAL` |                                | [See Round](#round) (only for single player games) |
 | `draw`             | `any`    | `OPTIONAL` | `{myReplayData:123}`           | Replay object (only for multiplayer games)         |
 | `currency`         | `string` | `REQUIRED` | `eur`                          | _Player's_ currency (internal platform code)       |
@@ -777,7 +778,7 @@ Supported types and payloads are game specific.
 ### Round
 
 | Name            | Type      |            | Example          | Description                            |
-| --------------- | --------- | ---------- | ---------------- | -------------------------------------- |
+|-----------------|-----------|------------|------------------|----------------------------------------|
 | `roundId`       | `string`  | `REQUIRED` | -                | Round Id                               |
 | `wagers`        | `Wager[]` | `REQUIRED` | -                | List of wagers. [See Wager](#wager)    |
 | `previousState` | `any`     | `OPTIONAL` | `{myState: 123}` | _Player's_ state from before the round |
@@ -785,7 +786,7 @@ Supported types and payloads are game specific.
 ### PlayWager
 
 | Name    | Type       |            | Example                        | Description                                                                                                                                             |
-| ------- | ---------- | ---------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------|------------|------------|--------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `data`  | `any`      | `OPTIONAL` | `[{"spin":  1}, {"spin":  2}]` | Game outcome                                                                                                                                            |
 | `state` | `any`      | `OPTIONAL` | `{"collection": 10}`           | Player's game state persistent between rounds                                                                                                           |
 | `win`   | `number`   | `REQUIRED` | `16.45`                        | Cash win in Player's currency                                                                                                                           |
@@ -795,7 +796,7 @@ Supported types and payloads are game specific.
 ### Wager
 
 | Name        | Type       |            | Example                             | Description                                                                                                                                                            |
-| ----------- | ---------- | ---------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-------------|------------|------------|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `createdAt` | `Date`     | `REQUIRED` | `Mon Jan 29 2024 11:34:14 GMT+0100` | Date of wager creation                                                                                                                                                 |
 | `data`      | `any`      | `OPTIONAL` | `[{"spin":  1}, {"spin":  2}]`      | Game outcome                                                                                                                                                           |
 | `state`     | `any`      | `OPTIONAL` | `{"collection": 10}`                | Player's game state persistent between rounds                                                                                                                          |
@@ -808,7 +809,7 @@ Supported types and payloads are game specific.
 ### BetConfig
 
 | Name        | Type       |            | Example                 | Description                         |
-| ----------- | ---------- | ---------- | ----------------------- | ----------------------------------- |
+|-------------|------------|------------|-------------------------|-------------------------------------|
 | `available` | `number[]` | `REQUIRED` | `[0.01, 0.5, 1, 5, 10]` | Available bets in Player's currency |
 | `default`   | `number`   | `REQUIRED` | `0.5`                   | Default bet in Player's currency    |
 | `coin`      | `number`   | `REQUIRED` | `25`                    | Coin                                |
@@ -816,7 +817,7 @@ Supported types and payloads are game specific.
 ### BetLimits
 
 | Name           | Type     |            | Example | Description                     |
-| -------------- | -------- | ---------- | ------- | ------------------------------- |
+|----------------|----------|------------|---------|---------------------------------|
 | `currencyRate` | `number` | `REQUIRED` | `1`     | Currency rate                   |
 | `exchangeRate` | `number` | `REQUIRED` | `1`     | Exchange rate                   |
 | `maxBet`       | `number` | `REQUIRED` | `25`    | Maximum bet available           |
@@ -826,7 +827,7 @@ Supported types and payloads are game specific.
 ### GameHistoryRound
 
 | Name           | Type     |            | Example  | Description                                  |
-| -------------- | -------- | ---------- | -------- | -------------------------------------------- |
+|----------------|----------|------------|----------|----------------------------------------------|
 | `createdAt`    | `Date`   | `REQUIRED` |          | Date of the round                            |
 | `roundId`      | `string` | `REQUIRED` |          | Player's currency                            |
 | `bet`          | `number` | `REQUIRED` | `123.45` | Bet in Player's currency                     |
@@ -837,7 +838,7 @@ Supported types and payloads are game specific.
 ### PromoUIStyle
 
 | Name    | Type     |            | Example | Description         |
-| ------- | -------- | ---------- | ------- | ------------------- |
+|---------|----------|------------|---------|---------------------|
 | `x`     | `number` | `OPTIONAL` | `100`   | Horizontal position |
 | `y`     | `number` | `OPTIONAL` | `100`   | Vertical position   |
 | `alpha` | `number` | `OPTIONAL` | `0.9`   | Opacity             |
@@ -846,7 +847,7 @@ Supported types and payloads are game specific.
 ### Room
 
 | Name          | Type     |            | Example               | Description                              |
-| ------------- | -------- | ---------- | --------------------- | ---------------------------------------- |
+|---------------|----------|------------|-----------------------|------------------------------------------|
 | `roomId`      | `string` | `REQUIRED` | `abcd`                | Room Id                                  |
 | `name`        | `string` | `REQUIRED` | `my room`             | Name of the room                         |
 | `provider`    | `string` | `REQUIRED` | `myProvide`           | Name of the provider                     |
@@ -877,7 +878,7 @@ None.
 **Returns**
 
 | Name | Type         |            | Example | Description               |
-| ---- | ------------ | ---------- | ------- | ------------------------- |
+|------|--------------|------------|---------|---------------------------|
 | `.`  | `Campaign[]` | `REQUIRED` |         | [See Campaign](#Campaign) |
 
 ---
@@ -895,14 +896,14 @@ Gets campaign details
 **Arguments**
 
 | Name               | Type      | Example                                | Description                   |
-| ------------------ | --------- | -------------------------------------- | ----------------------------- |
+|--------------------|-----------|----------------------------------------|-------------------------------|
 | `campaignId`       | `string`  | `db76b227-0582-45bc-a2cd-fbf38449f28e` | Campaign Id                   |
 | `withTranslations` | `boolean` | `true`                                 | Fetches campaign translations |
 
 **Returns**
 
 | Name | Type             |            | Example | Description                           |
-| ---- | ---------------- | ---------- | ------- | ------------------------------------- |
+|------|------------------|------------|---------|---------------------------------------|
 | `.`  | `CampaignDetail` | `REQUIRED` |         | [See CampaignDetail](#CampaignDetail) |
 
 ---
@@ -920,7 +921,7 @@ Gets campaign info displayed in UI
 **Returns**
 
 | Name         | Type                      | Example | Description                         |
-| ------------ | ------------------------- | ------- | ----------------------------------- |
+|--------------|---------------------------|---------|-------------------------------------|
 | `freeBets`   | `IFreeBetsCampaignInfo`   |         | [See CampaignsInfo](#CampaignsInfo) |
 | `prizeDrop`  | `IPrizeDropCampaignInfo`  |         | [See CampaignsInfo](#CampaignsInfo) |
 | `tournament` | `ITournamentCampaignInfo` |         | [See CampaignsInfo](#CampaignsInfo) |
@@ -940,7 +941,7 @@ Opts in/out from campaign
 **Arguments**
 
 | Name         | Type      | Example                                | Description                        |
-| ------------ | --------- | -------------------------------------- | ---------------------------------- |
+|--------------|-----------|----------------------------------------|------------------------------------|
 | `campaignId` | `string`  | `db76b227-0582-45bc-a2cd-fbf38449f28e` | Campaign Id                        |
 | `optIn`      | `boolean` | `true`                                 | Indicates if player opts in or out |
 
@@ -962,7 +963,7 @@ Acknowledges the campaign finish. After that the campaign will disappear from th
 **Arguments**
 
 | Name         | Type     | Example                                | Description |
-| ------------ | -------- | -------------------------------------- | ----------- |
+|--------------|----------|----------------------------------------|-------------|
 | `campaignId` | `string` | `db76b227-0582-45bc-a2cd-fbf38449f28e` | Campaign Id |
 
 **Returns**
@@ -983,7 +984,7 @@ Sends event to the promo tool
 **Arguments**
 
 | Name         | Type     | Example                                | Description                                                                          |
-| ------------ | -------- | -------------------------------------- | ------------------------------------------------------------------------------------ |
+|--------------|----------|----------------------------------------|--------------------------------------------------------------------------------------|
 | `campaignId` | `string` | `db76b227-0582-45bc-a2cd-fbf38449f28e` | Campaign Id                                                                          |
 | `eventId`    | `string` | `db76b227-0582-45bc-a2cd-fbf38449f28e` | Unique event id used for idempotency (same eventId will always return same response) |
 | `eventName`  | `string` | `myCustomEvent`                        | Event name to be handled by promo tool                                               |
@@ -992,7 +993,7 @@ Sends event to the promo tool
 **Returns**
 
 | Name | Type  |            | Example | Description                       |
-| ---- | ----- | ---------- | ------- | --------------------------------- |
+|------|-------|------------|---------|-----------------------------------|
 | `.`  | `any` | `OPTIONAL` |         | Object returned by the promo tool |
 
 ---
@@ -1010,14 +1011,14 @@ Reads the value of the feed
 **Arguments**
 
 | Name         | Type     | Example                                | Description          |
-| ------------ | -------- | -------------------------------------- | -------------------- |
+|--------------|----------|----------------------------------------|----------------------|
 | `campaignId` | `string` | `db76b227-0582-45bc-a2cd-fbf38449f28e` | Campaign Id          |
 | `params`     | `string` | `myCustomEvent`                        | Event payload object |
 
 **Returns**
 
 | Name | Type  |            | Example | Description                       |
-| ---- | ----- | ---------- | ------- | --------------------------------- |
+|------|-------|------------|---------|-----------------------------------|
 | `.`  | `any` | `OPTIONAL` |         | Object returned by the promo tool |
 
 ---
@@ -1035,14 +1036,14 @@ Reads the value of the feed
 **Arguments**
 
 | Name         | Type     | Example                                | Description          |
-| ------------ | -------- | -------------------------------------- | -------------------- |
+|--------------|----------|----------------------------------------|----------------------|
 | `campaignId` | `string` | `db76b227-0582-45bc-a2cd-fbf38449f28e` | Campaign Id          |
 | `params`     | `string` | `myCustomEvent`                        | Event payload object |
 
 **Returns**
 
 | Name | Type  |            | Example | Description                       |
-| ---- | ----- | ---------- | ------- | --------------------------------- |
+|------|-------|------------|---------|-----------------------------------|
 | `.`  | `any` | `OPTIONAL` |         | Object returned by the promo tool |
 
 ### Types
@@ -1050,7 +1051,7 @@ Reads the value of the feed
 ### Campaign
 
 | Name         | Type     |            | Example                                     | Description         |
-| ------------ | -------- | ---------- | ------------------------------------------- | ------------------- |
+|--------------|----------|------------|---------------------------------------------|---------------------|
 | `campaignId` | `string` | `REQUIRED` | `db76b227-0582-45bc-a2cd-fbf38449f28e`      | Campaign id         |
 | `start`      | `Date`   | `OPTIONAL` |                                             | Campaign start date |
 | `end`        | `Date`   | `OPTIONAL` |                                             | Campaign end date   |
@@ -1062,7 +1063,7 @@ Reads the value of the feed
 ### CampaignDetail
 
 | Name            | Type     |            | Example                                     | Description           |
-| --------------- | -------- | ---------- | ------------------------------------------- | --------------------- |
+|-----------------|----------|------------|---------------------------------------------|-----------------------|
 | `campaignId`    | `string` | `REQUIRED` | `db76b227-0582-45bc-a2cd-fbf38449f28e`      | Campaign id           |
 | `start`         | `Date`   | `OPTIONAL` |                                             | Campaign start date   |
 | `end`           | `Date`   | `OPTIONAL` |                                             | Campaign end date     |
@@ -1074,11 +1075,12 @@ Reads the value of the feed
 | `playerState`   | `any`    | `REQUIRED` | `{"abc": {...}}`                            | Campaign player state |
 
 ### CampaignsInfo
-| Name            | Type                      |            | Example                                     | Description     |
-| --------------- | ------------------------- | ---------- | ------------------------------------------- | --------------- |
-| `freeBets`      | `IFreeBetsCampaignInfo`   | `OPTIONAL` | `{"used": 5, "total": 10}`                  | FreeBets info   |
-| `prizeDrop`     | `IPrizeDropCampaignInfo`  | `OPTIONAL` | `{"left": 5, "total": 10}`                  | PrizeDrop info  |
-| `tournament`    | `ITournamentCampaignInfo` | `OPTIONAL` | `{"playerRanked": 2, "totalPositions": 10}` | Tournament info |
+
+| Name         | Type                      |            | Example                                     | Description     |
+|--------------|---------------------------|------------|---------------------------------------------|-----------------|
+| `freeBets`   | `IFreeBetsCampaignInfo`   | `OPTIONAL` | `{"used": 5, "total": 10}`                  | FreeBets info   |
+| `prizeDrop`  | `IPrizeDropCampaignInfo`  | `OPTIONAL` | `{"left": 5, "total": 10}`                  | PrizeDrop info  |
+| `tournament` | `ITournamentCampaignInfo` | `OPTIONAL` | `{"playerRanked": 2, "totalPositions": 10}` | Tournament info |
 
 ## Provably Fair API
 
@@ -1103,7 +1105,7 @@ None.
 **Returns**
 
 | Name | Type                |            | Example | Description                                 |
-| ---- | ------------------- | ---------- | ------- | ------------------------------------------- |
+|------|---------------------|------------|---------|---------------------------------------------|
 | `.`  | `ProvablyFairSeeds` | `REQUIRED` |         | [See ProvablyFairSeeds](#ProvablyFairSeeds) |
 
 ---
@@ -1121,13 +1123,13 @@ Sets new client seeds and rotates server seed
 **Arguments**
 
 | Name         | Type     | Example | Description     |
-| ------------ | -------- | ------- | --------------- |
+|--------------|----------|---------|-----------------|
 | `clientSeed` | `string` | `abcd`  | New client seed |
 
 **Returns**
 
 | Name | Type                |            | Example | Description                                 |
-| ---- | ------------------- | ---------- | ------- | ------------------------------------------- |
+|------|---------------------|------------|---------|---------------------------------------------|
 | `.`  | `ProvablyFairSeeds` | `REQUIRED` |         | [See ProvablyFairSeeds](#ProvablyFairSeeds) |
 
 ---
@@ -1145,13 +1147,13 @@ Returns provably fair details of the round
 **Arguments**
 
 | Name      | Type     | Example                                | Description |
-| --------- | -------- | -------------------------------------- | ----------- |
+|-----------|----------|----------------------------------------|-------------|
 | `roundId` | `string` | `db76b227-0582-45bc-a2cd-fbf38449f28e` | Round Id    |
 
 **Returns**
 
 | Name | Type                     |            | Example | Description                                           |
-| ---- | ------------------------ | ---------- | ------- | ----------------------------------------------------- |
+|------|--------------------------|------------|---------|-------------------------------------------------------|
 | `.`  | `ProvablyFairRoundState` | `REQUIRED` |         | [See ProvablyFairRoundState](#ProvablyFairRoundState) |
 
 ---
@@ -1169,13 +1171,13 @@ Returns server seed based on its hashed version
 **Arguments**
 
 | Name             | Type     | Example                                                            | Description        |
-| ---------------- | -------- | ------------------------------------------------------------------ | ------------------ |
+|------------------|----------|--------------------------------------------------------------------|--------------------|
 | `serverSeedHash` | `string` | `abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd` | Hashed server seed |
 
 **Returns**
 
 | Name         | Type     |            | Example                                                            | Description |
-| ------------ | -------- | ---------- | ------------------------------------------------------------------ | ----------- |
+|--------------|----------|------------|--------------------------------------------------------------------|-------------|
 | `serverSeed` | `string` | `REQUIRED` | `abcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcdabcd` | Server seed |
 
 ---
@@ -1193,13 +1195,13 @@ Returns provably fair details of the multiplayer draw
 **Arguments**
 
 | Name     | Type     | Example                                | Description |
-| -------- | -------- | -------------------------------------- | ----------- |
+|----------|----------|----------------------------------------|-------------|
 | `drawId` | `string` | `db76b227-0582-45bc-a2cd-fbf38449f28e` | Draw Id     |
 
 **Returns**
 
 | Name | Type                    |            | Example | Description                                         |
-| ---- | ----------------------- | ---------- | ------- | --------------------------------------------------- |
+|------|-------------------------|------------|---------|-----------------------------------------------------|
 | `.`  | `ProvablyFairDrawState` | `REQUIRED` |         | [See ProvablyFairDrawState](#ProvablyFairDrawState) |
 
 ---
@@ -1219,14 +1221,14 @@ Returns proof of the fair gameplay for a given `seeds` and `nonce`, or given `se
 **Arguments**
 
 | Name       | Type                              |          | Description                                        |
-| ---------- | --------------------------------- | -------- | -------------------------------------------------- |
+|------------|-----------------------------------|----------|----------------------------------------------------|
 | `rngState` | `RoundRngState` or `DrawRngState` | REQUIRED | server seed                                        |
 | `data`     | `any`                             | OPTIONAL | data specific for the game, to allow precise proof |
 
 **Returns**
 
 | Name | Type            |            | Example | Description                         |
-| ---- | --------------- | ---------- | ------- | ----------------------------------- |
+|------|-----------------|------------|---------|-------------------------------------|
 | .    | `FairnessProof` | `REQUIRED` |         | [See FairnessProof](#FairnessProof) |
 
 ### Types
@@ -1234,7 +1236,7 @@ Returns proof of the fair gameplay for a given `seeds` and `nonce`, or given `se
 ### RoundRngState
 
 | Name         | Type     | Example                                                            | Description |
-| ------------ | -------- | ------------------------------------------------------------------ | ----------- |
+|--------------|----------|--------------------------------------------------------------------|-------------|
 | `serverSeed` | `string` | `69742f105765e8d0a35a5819918a8d945f2a8f9f211e60c308a83c2af3a2c759` | server seed |
 | `clientSeed` | `string` | `my-client-seed`                                                   | client seed |
 | `nonce`      | `number` | `13`                                                               | nonce       |
@@ -1242,14 +1244,14 @@ Returns proof of the fair gameplay for a given `seeds` and `nonce`, or given `se
 ### DrawRngState
 
 | Name   | Type     | Example                                                            | Description   |
-| ------ | -------- | ------------------------------------------------------------------ | ------------- |
+|--------|----------|--------------------------------------------------------------------|---------------|
 | `hash` | `string` | `69742f105765e8d0a35a5819918a8d945f2a8f9f211e60c308a83c2af3a2c759` | server hash   |
 | `seed` | `string` | `players-seed`                                                     | players' seed |
 
 ### ProvablyFairSeeds
 
 | Name                 | Type       |            | Example              | Description                          |
-| -------------------- | ---------- | ---------- | -------------------- | ------------------------------------ |
+|----------------------|------------|------------|----------------------|--------------------------------------|
 | `clientSeed`         | `string`   | `REQUIRED` | `abcd`               | Client seed                          |
 | `serverSeedHash`     | `string`   | `REQUIRED` | `abcd`               | Hashed server seed                   |
 | `nextServerSeedHash` | `string`   | `REQUIRED` | `abcd`               | Hashed next server seed              |
@@ -1259,7 +1261,7 @@ Returns proof of the fair gameplay for a given `seeds` and `nonce`, or given `se
 ### ProvablyFairRoundState
 
 | Name                 | Type                     |            | Example  | Description               |
-| -------------------- | ------------------------ | ---------- | -------- | ------------------------- |
+|----------------------|--------------------------|------------|----------|---------------------------|
 | `clientSeed`         | `string`                 | `REQUIRED` | `abcd`   | Client seed               |
 | `serverSeedHash`     | `string`                 | `REQUIRED` | `abcd`   | Hashed server seed        |
 | `nextServerSeedHash` | `string`                 | `REQUIRED` | `abcd`   | Hashed next server seed   |
@@ -1270,7 +1272,7 @@ Returns proof of the fair gameplay for a given `seeds` and `nonce`, or given `se
 ### ProvablyFairDrawState
 
 | Name        | Type     |            | Example | Description                         |
-| ----------- | -------- | ---------- | ------- | ----------------------------------- |
+|-------------|----------|------------|---------|-------------------------------------|
 | `hash`      | `string` | `REQUIRED` | `abcd`  | Current server hash                 |
 | `seed`      | `string` | `REQUIRED` | `abcd`  | Players' seed for the given room    |
 | `hashIndex` | `string` | `REQUIRED` | 12342   | Index of the hash in the hash chain |
@@ -1278,21 +1280,21 @@ Returns proof of the fair gameplay for a given `seeds` and `nonce`, or given `se
 ### FairnessProof
 
 | Name             | Type              |            | Example | Description                                                                                               |
-| ---------------- | ----------------- | ---------- | ------- | --------------------------------------------------------------------------------------------------------- |
+|------------------|-------------------|------------|---------|-----------------------------------------------------------------------------------------------------------|
 | `hashes`         | `Hash[]`          | `REQUIRED` |         | List of hashes generated over the course of the given round, to extract random numbers. [See Hash](#Hash) |
 | `randomizations` | `Randomization[]` | `REQUIRED` |         | List of randomizations requested by the game for a given round. [See Randomization](#Randomization)       |
 
 #### Hash
 
 | Name    | Type       |            | Example                                                                | Description                                 |
-| ------- | ---------- | ---------- | ---------------------------------------------------------------------- | ------------------------------------------- |
+|---------|------------|------------|------------------------------------------------------------------------|---------------------------------------------|
 | `hex`   | `string`   | `REQUIRED` | `634ce936de372e6033083cbce378edaa53734ac19f69ebc193cf44fe5dcb29fc`     | Hex-string representing 256-bit hash        |
 | `bytes` | `number[]` | `REQUIRED` | `[99, 76, 233, 54, 222, 55, 46, 96, 51, 8, 60, 188, 227, 120, 237...]` | Array of 32 bytes representing 256-bit hash |
 
 #### Randomization
 
 | Name           | Type           |            | Example         | Description                                                                                                                                                        |
-| -------------- | -------------- | ---------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+|----------------|----------------|------------|-----------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `limit`        | `number`       | `REQUIRED` | `10001`         | Limit requested by the game for a given randomization, i.e. `random(limit)` call made by the game                                                                  |
 | `extractions`  | `Extraction[]` | `REQUIRED` |                 | A list of attempts to get the integer satisfying limit condition, as in Unbiased Integer Randomisation Algorithm used in the system. [See Extraction](#Extraction) |
 | `randomNumber` | `number`       | `REQUIRED` | `2753`          | Resulting random number                                                                                                                                            |
@@ -1301,7 +1303,7 @@ Returns proof of the fair gameplay for a given `seeds` and `nonce`, or given `se
 #### Extraction
 
 | Name        | Type     |            | Example      | Description                                                                                                                                                                  |
-| ----------- | -------- | ---------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|-------------|----------|------------|--------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `cursor`    | `number` | `REQUIRED` | `4`          | Cursor value for a given extraction                                                                                                                                          |
 | `hashIndex` | `number` | `REQUIRED` | `0`          | Equal to `Math.floor(cursor / 8)` - index of a hash from which the current extraction is performed; refers to the `hashes` list                                              |
 | `offset`    | `number` | `REQUIRED` | `4`          | Equal to `cursor % 8` - offset within a current hash, which points to the integer being extracted                                                                            |
@@ -1328,7 +1330,7 @@ Floors the value to the decimal precision specified byt he platform for a given 
 **Arguments**
 
 | Name       | Type     |            | Example        | Description                           |
-| ---------- | -------- | ---------- | -------------- | ------------------------------------- |
+|------------|----------|------------|----------------|---------------------------------------|
 | `value`    | `number` | `REQUIRED` | `0.0000001289` | value to be formatted                 |
 | `currency` | `string` | `OPTIONAL` | `"btc"`        | currency, defaults to player currency |
 | `language` | `string` | `OPTIONAL` | `"en-GB"`      | language, defaults to player language |
@@ -1336,7 +1338,7 @@ Floors the value to the decimal precision specified byt he platform for a given 
 **Returns**
 
 | Name | Type     |            | Example          | Description                             |
-| ---- | -------- | ---------- | ---------------- | --------------------------------------- |
+|------|----------|------------|------------------|-----------------------------------------|
 | N/A  | `string` | `REQUIRED` | `BTC 0.00000012` | floored and formatted string to display |
 
 ---
@@ -1356,7 +1358,7 @@ None.
 **Returns**
 
 | Name | Type                     |            | Example      | Description                |
-| ---- | ------------------------ | ---------- | ------------ | -------------------------- |
+|------|--------------------------|------------|--------------|----------------------------|
 | N/A  | `{[key:string]: number}` | `REQUIRED` | `{"btc": 8}` | Decimals for each currency |
 
 ---
@@ -1374,13 +1376,13 @@ Returns decimals number for a given currency.
 **Arguments**
 
 | Name       | Type     |            | Example | Description                                |
-| ---------- | -------- | ---------- | ------- | ------------------------------------------ |
+|------------|----------|------------|---------|--------------------------------------------|
 | `currency` | `string` | `OPTIONAL` | `"btc"` | currency, defaults to the players currency |
 
 **Returns**
 
 | Name | Type     |            | Example | Description                           |
-| ---- | -------- | ---------- | ------- | ------------------------------------- |
+|------|----------|------------|---------|---------------------------------------|
 | N/A  | `number` | `REQUIRED` | `8`     | exchange rates for the given currency |
 
 ---
@@ -1398,14 +1400,14 @@ Converts value in a given currency to the base currency value.
 **Arguments**
 
 | Name       | Type     |            | Example     | Description                           |
-| ---------- | -------- | ---------- | ----------- | ------------------------------------- |
+|------------|----------|------------|-------------|---------------------------------------|
 | `value`    | `number` | `REQUIRED` | `0.0001289` | value to be converted                 |
 | `currency` | `string` | `OPTIONAL` | `btc`       | currency, defaults to player currency |
 
 **Returns**
 
 | Name | Type     |            | Example       | Description                          |
-| ---- | -------- | ---------- | ------------- | ------------------------------------ |
+|------|----------|------------|---------------|--------------------------------------|
 | N/A  | `number` | `REQUIRED` | `9.552019779` | value converted to the base currency |
 
 ---
@@ -1425,7 +1427,7 @@ None.
 **Returns**
 
 | Name | Type                     |            | Example      | Description                |
-| ---- | ------------------------ | ---------- | ------------ | -------------------------- |
+|------|--------------------------|------------|--------------|----------------------------|
 | N/A  | `{[key:string]: number}` | `REQUIRED` | `{"btc": 8}` | Decimals for each currency |
 
 ---
@@ -1443,13 +1445,13 @@ Returns decimals number for a given currency.
 **Arguments**
 
 | Name       | Type     |            | Example | Description                                |
-| ---------- | -------- | ---------- | ------- | ------------------------------------------ |
+|------------|----------|------------|---------|--------------------------------------------|
 | `currency` | `string` | `OPTIONAL` | `"btc"` | currency, defaults to the players currency |
 
 **Returns**
 
 | Name | Type     |            | Example | Description                     |
-| ---- | -------- | ---------- | ------- | ------------------------------- |
+|------|----------|------------|---------|---------------------------------|
 | N/A  | `number` | `REQUIRED` | `8`     | Decimals for the given currency |
 
 ---
@@ -1469,7 +1471,7 @@ None.
 **Returns**
 
 | Name | Type      |            | Example | Description                            |
-| ---- | --------- | ---------- | ------- | -------------------------------------- |
+|------|-----------|------------|---------|----------------------------------------|
 | N/A  | `boolean` | `REQUIRED` | `false` | Boolean value for showing lobby button |
 
 ---
@@ -1489,7 +1491,7 @@ None.
 **Returns**
 
 | Name | Type     |            | Example   | Description                                            |
-| ---- | -------- | ---------- | --------- | ------------------------------------------------------ |
+|------|----------|------------|-----------|--------------------------------------------------------|
 | N/A  | `string` | `REQUIRED` | `desktop` | String value indicates if channel is desktop or mobile |
 
 ---
@@ -1507,14 +1509,14 @@ Floors the given value to the specified number of decimals after the coma.
 **Arguments**
 
 | Name       | Type     |            | Example        | Description                             |
-| ---------- | -------- | ---------- | -------------- | --------------------------------------- |
+|------------|----------|------------|----------------|-----------------------------------------|
 | `value`    | `number` | `REQUIRED` | `0.0000001289` | value to be floored                     |
 | `decimals` | `number` | `REQUIRED` | `8`            | number of decimal places after the coma |
 
 **Returns**
 
 | Name | Type     |            | Example      | Description                                   |
-| ---- | -------- | ---------- | ------------ | --------------------------------------------- |
+|------|----------|------------|--------------|-----------------------------------------------|
 | N/A  | `number` | `REQUIRED` | `0.00000012` | value floored to the given amount of decimals |
 |      |          |            |              |                                               |
 
@@ -1533,12 +1535,12 @@ Floors the given value to number of decimals specific for a given currency.
 **Arguments**
 
 | Name       | Type     |            | Example        | Description                           |
-| ---------- | -------- | ---------- | -------------- | ------------------------------------- |
+|------------|----------|------------|----------------|---------------------------------------|
 | `value`    | `number` | `REQUIRED` | `0.0000001289` | value to be floored                   |
 | `currency` | `string` | `OPTIONAL` | `btc`          | currency, defaults to player currency |
 
 **Returns**
 
 | Name | Type     |            | Example      | Description                                               |
-| ---- | -------- | ---------- | ------------ | --------------------------------------------------------- |
+|------|----------|------------|--------------|-----------------------------------------------------------|
 | N/A  | `number` | `REQUIRED` | `0.00000012` | value floored to the number of decimals specific currency |

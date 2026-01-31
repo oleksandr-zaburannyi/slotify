@@ -79,7 +79,7 @@ simulator<IGame, IWager, {response: IPlayResponse; nonce: number}, InitData>(
             const rng = createRng({game, action, roundRngState: provablyFair ? roundRngState : undefined});
 
             if (game.simulate) {
-                const simulateResult = game.simulate({strategy, wagers, state: response?.state}, createRandom());
+                const simulateResult = game.simulate({strategy, wagers, state: response?.state, variant}, createRandom());
 
                 if (simulateResult) {
                     if (simulateResult.action && response?.next && !response?.next.includes(simulateResult.action)) {

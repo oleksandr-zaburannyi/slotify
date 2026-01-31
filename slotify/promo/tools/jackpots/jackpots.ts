@@ -5,15 +5,19 @@ import sum from "@slotify/shared/lib/sum";
 import {IPlayer, ITransactionRequest} from "../../util/routes";
 import {round} from "@slotify/shared/lib/round";
 import Exception from "@slotify/shared/lib/Exception";
-import {ITool} from "../../util/ITool";
 import {floor} from "@slotify/shared/lib/floor";
+import {getCurrencyRate} from "../../util/currencyRates";
+import {ITool} from "../../util/ITool";
 
 export const jackpotScheduledAccumulationInterval = 10000;
 const baseCurrencyDecimals = 2;
 
-export type IJackpotConfig<TPoolConfig extends {reset: number} = {reset: number}> = {[poolName: string]: TPoolConfig};
+export type IJackpotConfig<TPoolConfig extends {reset: number} = {reset: number}> = {
+    poolsConfig: {[poolName: string]: TPoolConfig};
+    baseCurrency: string;
+};
 
-export type IPlayerPoolWin = {amount: number; baseCurrencyAmount: number};
+export type IPlayerPoolWin = {amount: number; baseCurrencyAmount: number; time: number};
 
 export type IJackpotRoundState = {
     currencyRate: number;
@@ -28,6 +32,7 @@ export type IJackpotRoundState = {
 export type IJackpotPlayerState = {
     _rounds: {[roundId: string]: IJackpotRoundState};
     _poolStatistics: {[poolName: string]: IPoolStatistics};
+    _roundJackpotsWon: {roundId: string; totalRoundPoolWins: {[poolName: string]: IPlayerPoolWin}}[];
 };
 
 export type IJackpotWinData = {
@@ -37,15 +42,16 @@ export type IJackpotWinData = {
     step?: number;
     transactionId?: string;
     poolWins: {[poolName: string]: number};
+    time: number;
 };
 
 export type IPoolAmounts = {amount: number; seedAmount: number};
 export type IPoolStatistics = {totalContribution: number; totalWin: number; winsCount: number};
 export type IJackpotAccumulationData = {
-    poolAmounts: {[poolName: string]: IPoolAmounts};
-    poolStatistics: {[poolName: string]: IPoolStatistics};
-    pendingJackpotWins: {[entryId: number]: IJackpotWinData};
-    jackpotWinData?: IJackpotWinData;
+    _poolAmounts: {[poolName: string]: IPoolAmounts};
+    _poolStatistics: {[poolName: string]: IPoolStatistics};
+    _pendingJackpotWins: {[entryId: number]: IJackpotWinData};
+    _jackpotWinData?: IJackpotWinData;
 };
 
 export type IJackpotPoolChange = {contribution?: number; seedContribution?: number; isJackpotWin?: boolean};
@@ -54,7 +60,7 @@ export type IJackpotPoolsChange = {
 };
 
 export type IJackpotEntryData = {
-    type: "withdrawFinished" | "cancel" | "play" | "modification";
+    type: "withdrawFinished" | "cancelContributions" | "cancelWin" | "play" | "modification";
     playerId: string;
     roundId: string;
     step?: number;
@@ -74,6 +80,25 @@ export type IJackpotLog = {
     accumulation: {data: IJackpotAccumulationData; nextAccumulationTime: number};
     playerState: IJackpotPlayerState;
 };
+
+export async function getOrCreatePlayerState(loadPlayerState: (readOnly?: boolean) => Promise<IJackpotPlayerState>, config: IJackpotConfig) {
+    return (
+        (await loadPlayerState()) ?? {
+            _rounds: {},
+            _poolStatistics: Object.fromEntries(
+                Object.keys(config.poolsConfig).map(poolName => [
+                    poolName,
+                    {
+                        totalContribution: 0,
+                        totalWin: 0,
+                        winsCount: 0,
+                    },
+                ]),
+            ),
+            _roundJackpotsWon: [],
+        }
+    );
+}
 
 export async function calculateBaseCurrencyPoolsChange(playersCurrencyPoolsChange: IJackpotPoolsChange, currencyRate: number) {
     const baseCurrencyPoolsChange: IJackpotPoolsChange = {};
@@ -107,12 +132,14 @@ export function accumulateJackpotPools(
     config: IJackpotConfig,
     latestAccumulationData: Omit<IJackpotAccumulationData, "type">,
     entries: IStreamEntry<IJackpotEntryData>[],
+    time: number,
 ): {
-    poolAmounts: {[poolName: string]: IPoolAmounts};
-    pendingJackpotWins: {[entryId: number]: IJackpotWinData};
-    poolStatistics: {[poolName: string]: IPoolStatistics};
+    _poolAmounts: {[poolName: string]: IPoolAmounts};
+    _pendingJackpotWins: {[entryId: number]: IJackpotWinData};
+    _poolStatistics: {[poolName: string]: IPoolStatistics};
 } {
-    const {poolAmounts, pendingJackpotWins, poolStatistics} = latestAccumulationData;
+    const {poolsConfig} = config;
+    const {_poolAmounts, _pendingJackpotWins, _poolStatistics} = latestAccumulationData;
 
     for (const entry of entries) {
         const entryId = parseInt(entry.id as any);
@@ -121,51 +148,59 @@ export function accumulateJackpotPools(
         const poolWins: {[poolName: string]: number} = {};
         Object.entries(poolsChange).forEach(([poolName, {contribution, seedContribution, isJackpotWin}]) => {
             if (contribution) {
-                poolAmounts[poolName].amount += contribution || 0;
-                poolStatistics[poolName].totalContribution += contribution;
+                _poolAmounts[poolName].amount += contribution || 0;
+
+                if (entry.data.type === "cancelWin") {
+                    _poolStatistics[poolName].winsCount--;
+                    // cancelWin contribution is deducted by reset at this point
+                    _poolStatistics[poolName].totalWin -= contribution + config.poolsConfig[poolName].reset;
+                } else {
+                    _poolStatistics[poolName].totalContribution += contribution;
+                }
             }
 
             if (seedContribution) {
-                poolAmounts[poolName].seedAmount += seedContribution || 0;
-                poolStatistics[poolName].totalContribution += seedContribution;
+                _poolAmounts[poolName].seedAmount += seedContribution || 0;
+                _poolStatistics[poolName].totalContribution += seedContribution;
             }
 
-            const poolAmount = poolAmounts[poolName].amount;
-            const poolSeedAmount = poolAmounts[poolName].seedAmount;
+            const poolAmount = _poolAmounts[poolName].amount;
+            const poolSeedAmount = _poolAmounts[poolName].seedAmount;
             if (poolAmount < 0 || poolSeedAmount < 0) {
                 logger.warn("Jackpot pool reached negative value due to cancels", {
                     latestAccumulationData,
                     entry,
-                    poolAmounts,
+                    _poolAmounts,
                 });
             }
 
             if (isJackpotWin) {
                 const winAmount = Math.max(0, floor(poolAmount, baseCurrencyDecimals)); // if pool is negative, pay 0
                 poolWins[poolName] = winAmount;
-                poolAmounts[poolName].amount = poolAmount - winAmount + config[poolName].reset + poolSeedAmount;
-                poolAmounts[poolName].seedAmount = 0;
+                _poolAmounts[poolName].amount = poolAmount - winAmount + poolsConfig[poolName].reset + poolSeedAmount;
+                _poolAmounts[poolName].seedAmount = 0;
 
-                poolStatistics[poolName].winsCount++;
-                poolStatistics[poolName].totalWin += winAmount;
+                _poolStatistics[poolName].winsCount++;
+                _poolStatistics[poolName].totalWin += winAmount;
             }
         });
 
         if (Object.entries(poolWins).length > 0) {
-            pendingJackpotWins[entryId] = {
+            _pendingJackpotWins[entryId] = {
                 entryId,
                 playerId,
                 roundId,
                 step,
                 transactionId,
                 poolWins,
+                time,
             };
         }
     }
 
-    Object.entries(poolStatistics).forEach(([poolName, statistics]) => {
-        const totalContributed = statistics.totalContribution + (statistics.winsCount + 1) * config[poolName].reset;
-        const totalAccrued = poolAmounts[poolName].amount + poolAmounts[poolName].seedAmount + statistics.totalWin;
+    Object.entries(_poolStatistics).forEach(([poolName, statistics]) => {
+        const totalContributed = statistics.totalContribution + (statistics.winsCount + 1) * poolsConfig[poolName].reset;
+        const totalAccrued = _poolAmounts[poolName].amount + _poolAmounts[poolName].seedAmount + statistics.totalWin;
         const difference = totalContributed - totalAccrued;
         if (Math.abs(difference) > Math.pow(10, -baseCurrencyDecimals)) {
             logger.error(`Jackpot pool ${poolName} contributions and payout are inconsistent by ${difference}`, {
@@ -173,41 +208,41 @@ export function accumulateJackpotPools(
                 totalAccrued,
                 difference,
                 statistics,
-                amounts: poolAmounts[poolName],
-                config: config[poolName],
+                amounts: _poolAmounts[poolName],
+                config: poolsConfig[poolName],
             });
         }
     });
 
     return {
-        poolAmounts,
-        pendingJackpotWins,
-        poolStatistics,
+        _poolAmounts,
+        _pendingJackpotWins,
+        _poolStatistics,
     };
 }
 
 export function synchronizeJackpotWin(winEntry: IStreamEntry<IJackpotEntryData>): IStreamAccumulator<IJackpotConfig, IJackpotEntryData, IJackpotAccumulationData> {
     return async ({config, entries, latestAccumulationData, time}) => {
-        const {poolAmounts, pendingJackpotWins, poolStatistics} = accumulateJackpotPools(config, latestAccumulationData, entries);
+        const {_poolAmounts, _pendingJackpotWins, _poolStatistics} = accumulateJackpotPools(config, latestAccumulationData, entries, time);
 
-        const jackpotWinData = pendingJackpotWins[winEntry.id];
-        delete pendingJackpotWins[winEntry.id];
+        const _jackpotWinData = _pendingJackpotWins[winEntry.id];
+        delete _pendingJackpotWins[winEntry.id];
 
-        if (!jackpotWinData) {
+        if (!_jackpotWinData) {
             logger.error("Jackpot stream state inconsistent, transactionJackpot win needs to be present in pendingJackpotWins", {
                 winEntry,
                 latestAccumulationData,
-                poolAmounts,
-                pendingJackpotWins,
+                _poolAmounts,
+                _pendingJackpotWins,
             });
         }
 
         return {
             data: {
-                poolAmounts,
-                poolStatistics,
-                pendingJackpotWins,
-                jackpotWinData,
+                _poolAmounts,
+                _poolStatistics,
+                _pendingJackpotWins,
+                _jackpotWinData,
             },
             nextAccumulationTime: time + jackpotScheduledAccumulationInterval,
         };
@@ -233,7 +268,7 @@ export async function evaluateJackpotWin(
         const accumulation = await streamSynchronizedAccumulator(synchronizeJackpotWin(winEntry));
         logger.info("Jackpot win stream synchronization finished", {winEntry, accumulation});
 
-        const jackpotWinData = accumulation.data.jackpotWinData!;
+        const jackpotWinData = accumulation.data._jackpotWinData!;
         const baseCurrencyJackpotWin = sum(Object.values(jackpotWinData.poolWins));
         const jackpotWin = baseCurrencyJackpotWin * roundState.currencyRate;
 
@@ -242,13 +277,14 @@ export async function evaluateJackpotWin(
             playerPoolWins[poolName] = {
                 baseCurrencyAmount: amount,
                 amount: amount * roundState.currencyRate,
+                time: jackpotWinData.time,
             };
         }
 
         const totalRoundPoolWins = roundState?.totalRoundPoolWins ?? {};
-        Object.entries(playerPoolWins).forEach(([poolName, {amount, baseCurrencyAmount}]) => {
+        Object.entries(playerPoolWins).forEach(([poolName, {amount, baseCurrencyAmount, time}]) => {
             if (!totalRoundPoolWins[poolName]) {
-                totalRoundPoolWins[poolName] = {amount: 0, baseCurrencyAmount: 0};
+                totalRoundPoolWins[poolName] = {amount: 0, baseCurrencyAmount: 0, time};
             }
             totalRoundPoolWins[poolName].amount = totalRoundPoolWins[poolName].amount + amount;
             totalRoundPoolWins[poolName].baseCurrencyAmount = totalRoundPoolWins[poolName].baseCurrencyAmount + baseCurrencyAmount;
@@ -265,17 +301,23 @@ export async function evaluateJackpotWin(
 }
 
 export async function create({config}: {config: IJackpotConfig}): Promise<IJackpotAccumulationData> {
-    const poolAmounts: {[poolName: string]: IPoolAmounts} = {};
-    const poolStatistics: {[poolName: string]: IPoolStatistics} = {};
+    const {poolsConfig} = config;
 
-    for (const [poolName, poolConfig] of Object.entries(config)) {
-        poolAmounts[poolName] = {amount: poolConfig.reset, seedAmount: 0};
-        poolStatistics[poolName] = {totalWin: 0, totalContribution: 0, winsCount: 0};
+    if (!poolsConfig || Object.entries(poolsConfig).length === 0) {
+        throw new Exception("Pools need to be configured");
+    }
+
+    const _poolAmounts: {[poolName: string]: IPoolAmounts} = {};
+    const _poolStatistics: {[poolName: string]: IPoolStatistics} = {};
+
+    for (const [poolName, poolConfig] of Object.entries(poolsConfig)) {
+        _poolAmounts[poolName] = {amount: poolConfig.reset, seedAmount: 0};
+        _poolStatistics[poolName] = {totalWin: 0, totalContribution: 0, winsCount: 0};
     }
     return {
-        poolAmounts,
-        poolStatistics,
-        pendingJackpotWins: {},
+        _poolAmounts,
+        _poolStatistics,
+        _pendingJackpotWins: {},
     };
 }
 
@@ -290,12 +332,13 @@ export async function accumulator({
     latestAccumulationData: IJackpotAccumulationData;
     time: number;
 }): Promise<{data: IJackpotAccumulationData; nextAccumulationTime: number}> {
-    const {poolAmounts, pendingJackpotWins, poolStatistics} = accumulateJackpotPools(config, latestAccumulationData, entries);
+    const {_poolAmounts, _pendingJackpotWins, _poolStatistics} = accumulateJackpotPools(config, latestAccumulationData, entries, time);
+
     return {
         data: {
-            poolAmounts,
-            pendingJackpotWins,
-            poolStatistics,
+            _poolAmounts,
+            _pendingJackpotWins,
+            _poolStatistics,
         },
         nextAccumulationTime: time + jackpotScheduledAccumulationInterval,
     };
@@ -328,20 +371,32 @@ export async function deposit({player, loadPlayerState, transaction}: {player: I
 
 export async function depositFinished({player, transaction, loadPlayerState}: {player: IPlayer; transaction: ITransactionRequest; loadPlayerState: any}) {
     if (transaction.category !== "normal") return;
+
     const playerState: IJackpotPlayerState = await loadPlayerState();
-    const roundState = playerState._rounds[transaction.roundId];
+    const {roundId, transactionId} = transaction;
+    const roundState = playerState._rounds[roundId];
+
+    Object.entries(roundState.poolsChange || {}).forEach(([poolName, poolChange]) => {
+        playerState._poolStatistics[poolName].totalContribution += (poolChange.contribution || 0) + (poolChange.seedContribution || 0);
+    });
 
     if (roundState.totalRoundPoolWins) {
         logger.info("Jackpot win deposit finished", {
             playerId: player.playerId,
-            roundId: transaction.roundId,
-            transactionId: transaction.transactionId,
+            roundId: roundId,
+            transactionId: transactionId,
             playerState,
         });
+
         Object.entries(roundState.totalRoundPoolWins).forEach(([poolName, roundPoolWin]) => {
             playerState._poolStatistics[poolName].totalWin += roundPoolWin.amount;
             playerState._poolStatistics[poolName].winsCount++;
         });
+
+        if (playerState._roundJackpotsWon.length >= 10) {
+            playerState._roundJackpotsWon.pop();
+        }
+        playerState._roundJackpotsWon.unshift({roundId, totalRoundPoolWins: roundState.totalRoundPoolWins});
     }
 
     delete playerState._rounds[transaction.roundId];
@@ -349,12 +404,17 @@ export async function depositFinished({player, transaction, loadPlayerState}: {p
     return {playerState};
 }
 
-export async function campaignFeed({config, loadCampaignState}: {config: IJackpotConfig; loadCampaignState: () => Promise<IStreamCampaignState<IJackpotAccumulationData>>}) {
+export async function campaignFeed({config, loadCampaignState, params}: {config: IJackpotConfig; loadCampaignState: () => Promise<IStreamCampaignState<IJackpotAccumulationData>>; params: Record<string, any>}) {
     const {data} = await loadCampaignState();
+    const currencyRate = params?.currency ? await getCurrencyRate(params.currency, config.baseCurrency) : 1;
     return {
-        config,
-        poolAmounts: Object.fromEntries(Object.entries(data.poolAmounts).map(([poolName, pool]) => [poolName, Math.max(0, floor(pool.amount, baseCurrencyDecimals))])),
+        poolAmounts: Object.fromEntries(Object.entries(data._poolAmounts).map(([poolName, pool]) => [poolName, Math.max(0, floor(pool.amount * currencyRate, baseCurrencyDecimals))])),
     };
+}
+
+export async function playerFeed({loadPlayerState}: {config: IJackpotConfig; loadPlayerState: () => Promise<IJackpotPlayerState>}) {
+    const {_roundJackpotsWon} = await loadPlayerState();
+    return {roundJackpotsWon: _roundJackpotsWon};
 }
 
 export const systemEvent: NonNullable<ITool["systemEvent"]> = async ({eventName, params, config, streamEntry}) => {
@@ -362,7 +422,7 @@ export const systemEvent: NonNullable<ITool["systemEvent"]> = async ({eventName,
         if (!params.poolName) throw new Exception("Pool not specified");
         if (!params.value) throw new Exception("Value not specified");
         if (typeof params.value !== "number") throw new Exception("Value should be a number");
-        if (!Object.keys(config).find(poolName => poolName === params.poolName)) throw new Exception("Couldn't find pool to modify");
+        if (!Object.keys(config.poolsConfig).find(poolName => poolName === params.poolName)) throw new Exception("Couldn't find pool to modify");
 
         const poolsChange: IJackpotPoolsChange = {
             [params.poolName]: {

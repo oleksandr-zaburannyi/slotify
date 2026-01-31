@@ -23,7 +23,7 @@ export class RtpMonitoring extends BaseEntity {
     @Column({type: "decimal", transformer: toFloat}) declaredRtp!: number;
     @Column({type: "json", nullable: true, transformer: withFixedDates}) calculus!: SampleLog[];
     @Column({transformer: toInt}) sampleCount!: number;
-    @Column({type: "decimal", nullable: true, transformer: toFloat}) sampleRtp?: number;
-    @Column({type: "decimal", nullable: true, transformer: toFloat}) sampleVariance?: number;
+    @Column({type: "decimal", nullable: true, transformer: toFloat}) sampleRtp?: number | null;
+    @Column({type: "decimal", nullable: true, transformer: toFloat}) sampleVariance?: number | null;
     @Column({type: "decimal", nullable: true, transformer: toFloat}) sampleMarginOfError?: number;
 }

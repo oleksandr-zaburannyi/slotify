@@ -10,6 +10,7 @@ import {getServiceUrl} from "@slotify/shared/lib/urls";
 import {v4} from "uuid";
 import {startCorrelation} from "@slotify/shared/lib/asyncContext";
 import {xorDecrypt, xorEncrypt} from "@slotify/shared/lib/xorCipher";
+import {getIp} from "@slotify/shared/lib/ip";
 
 type ConnectionsPerChannel = {[channel: string]: number};
 type MessageType = "connected" | "message" | "systemMessage" | "systemConnected" | "ping" | "pong";
@@ -32,6 +33,7 @@ export async function initWebsocketServer(server: Server, path: string, service:
     const websocketServer = new WebSocket.Server({noServer: true, path});
 
     server.on("upgrade", async (request, socket, head) => {
+        const ip = getIp(request);
         const handleUnauthorizedConnection = () => {
             websocketServer.handleUpgrade(request, socket, head, (webSocket: any) => {
                 webSocket.close(1008, "Unauthorized");
@@ -62,7 +64,7 @@ export async function initWebsocketServer(server: Server, path: string, service:
 
                 logger.info("New system connection started", {type, channel, systemId});
 
-                websocketServer.handleUpgrade(request, socket, head, handleConnectionUpgrade("system", channel, service, {systemId, signature}, encryptionKey));
+                websocketServer.handleUpgrade(request, socket, head, handleConnectionUpgrade("system", channel, service, {systemId, signature}, encryptionKey, ip));
             } else {
                 const token = searchParams.get("token")!;
                 const player = decrypt(token, "player");
@@ -77,7 +79,7 @@ export async function initWebsocketServer(server: Server, path: string, service:
                 connections[service][channel] ||= 0;
                 connections[service][channel]++;
 
-                websocketServer.handleUpgrade(request, socket, head, handleConnectionUpgrade("player", channel, service, {player}, encryptionKey));
+                websocketServer.handleUpgrade(request, socket, head, handleConnectionUpgrade("player", channel, service, {player}, encryptionKey, ip));
             }
         } catch (e) {
             logger.warn("Couldn't initialise socket connection", {error: e});
@@ -87,20 +89,20 @@ export async function initWebsocketServer(server: Server, path: string, service:
 }
 
 export function sendBroadcast(service: string, channel: string, message: any) {
-    logger.info(`WS broadcast from ${service}, channel ${channel}`, {sending: message});
+    logger.debug(`WS broadcast from ${service}, channel ${channel}`, {service, channel, sending: message});
     redis.publish(broadcastChannel(service, channel), JSON.stringify(message)).catch(e => {
         logger.warn("Error publishing broadcast message (redis)", {service, channel, message, error: e});
     });
 }
 
 export function sendMessage(service: string, channel: string, playerId: string, message: any) {
-    logger.info(`WS message from ${service} to player ${playerId}, channel ${channel} `, {playerId, sending: message});
+    logger.debug(`WS message from ${service} to player ${playerId}, channel ${channel} `, {playerId, service, channel, sending: message});
     redis.publish(messageChannel(service, channel, playerId), JSON.stringify(message)).catch(e => {
         logger.warn("Error publishing message (redis)", {service, channel, playerId, message, error: e});
     });
 }
 
-function handleConnectionUpgrade(type: "player" | "system", channel: string, service: string, typeData: any, encryptionKey: string | null) {
+function handleConnectionUpgrade(type: "player" | "system", channel: string, service: string, typeData: any, encryptionKey: string | null, ip: string) {
     const sendMessage = (webSocket: WebSocket, id: string) => {
         return (message: string) => {
             try {
@@ -135,7 +137,7 @@ function handleConnectionUpgrade(type: "player" | "system", channel: string, ser
                 } else {
                     message = {message: JSON.parse(data)};
                 }
-                await sendRequest(service, messageType, {...typeSpecificData, channel, ...message});
+                await sendRequest(service, messageType, {...typeSpecificData, channel, ...message, ip});
             } catch (e) {
                 logger.warn("Problem processing websocket message", {rawData, error: e});
             }
@@ -151,12 +153,12 @@ function handleConnectionUpgrade(type: "player" | "system", channel: string, ser
         connectedMessageType = "systemConnected";
         messageType = "systemMessage";
         connectionId = typeData.systemId;
-        connectedData = {channel, signature: typeData.signature, systemId: typeData.systemId};
+        connectedData = {channel, signature: typeData.signature, systemId: typeData.systemId, ip};
     } else {
         connectedMessageType = "connected";
         messageType = "message";
         connectionId = typeData.player.playerId;
-        connectedData = {channel, player: typeData.player};
+        connectedData = {channel, player: typeData.player, ip};
     }
 
     return async (webSocket: WebSocket) => {
@@ -167,7 +169,11 @@ function handleConnectionUpgrade(type: "player" | "system", channel: string, ser
         await redisPubSub.subscribe(broadcastChannel(service, channel), messageHandler);
         await redisPubSub.subscribe(messageChannel(service, channel, connectionId), messageHandler);
 
-        await sendRequest(service, connectedMessageType, connectedData);
+        const isSuccess = await sendRequest(service, connectedMessageType, connectedData);
+        if (!isSuccess) {
+            webSocket.close(1008, "Unauthorized");
+            return;
+        }
         webSocket.on("message", onWebsocketMessage(messageType, type === "system" ? {systemId: connectionId} : {player: typeData.player}, webSocket));
 
         webSocket.on("close", async () => {
@@ -181,14 +187,16 @@ function handleConnectionUpgrade(type: "player" | "system", channel: string, ser
     };
 }
 
-async function sendRequest(service: string, type: MessageType, data: {channel: string; [key: string]: any}) {
-    await startCorrelation({sessionId: data.channel, correlationId: v4()}, async () => {
+async function sendRequest(service: string, type: MessageType, data: {channel: string; ip: string; [key: string]: any}): Promise<boolean> {
+    return await startCorrelation({sessionId: data.channel, correlationId: v4()}, async () => {
         try {
-            logger.info(`WS request for service ${service}, channel ${data.channel}, type: ${type}`, {receiving: data.message});
+            logger.debug(`WS request for service ${service}, channel ${data.channel}, type: ${type}`, {receiving: data.message});
             const body = JSON.stringify(data);
-            await fetchAndParse(`${getServiceUrl(service)}/api/websocket/${type}`, {method: "POST", body, headers: {"Content-Type": "application/json"}});
+            const {success} = await fetchAndParse(`${getServiceUrl(service)}/api/websocket/${type}`, {method: "POST", body, headers: {"Content-Type": "application/json"}});
+            return success;
         } catch (error) {
             logger.warn("WS request failed", {data, error});
+            return false;
         }
     });
 }

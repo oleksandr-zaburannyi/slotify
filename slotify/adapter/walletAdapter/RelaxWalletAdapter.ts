@@ -1,5 +1,5 @@
 import IWalletAdapter, {ISession, IWalletAuthenticate, IWalletBalance, IWalletTransaction} from "./IWalletAdapter";
-import {Express, NextFunction, Request, Response} from "express";
+import {Router, NextFunction, Request, Response} from "express";
 import Exception, {IExceptionPopup} from "@slotify/shared/lib/Exception";
 import logger from "@slotify/shared/lib/logger";
 import fetch, {fetchAndParse} from "@slotify/shared/lib/fetch";
@@ -44,6 +44,7 @@ type IConfig = {
     platformCode: string;
     providers: Record<string, {code: string; name: string; rng?: {identification: string; softwareid: string}}>;
     timeout?: number;
+    currencyAliases?: Record<string, string>;
     currencyAliasesPerBrand?: Record<string, Record<string, string>>;
     cancelDelay?: number;
 };
@@ -57,12 +58,12 @@ export class RelaxWalletAdapter implements IWalletAdapter {
     config!: IConfig;
     cipher!: Cipher;
 
-    async init(wallet: string, api: Express, path: string, config: IConfig, whitelistedIps?: string[]) {
+    async init(wallet: string, router: Router, config: IConfig, whitelistedIps?: string[]) {
         this.wallet = wallet;
         this.config = config;
         this.cipher = new Cipher(this.config.user + ":" + this.config.password, this.wallet);
 
-        api.get(path + "/launcher", async (req: Request<unknown, unknown, unknown, ILauncherQueryParams>, res: any) => {
+        router.get("/launcher", async (req: Request<unknown, unknown, unknown, ILauncherQueryParams>, res: any) => {
             const game = req.query["gameid"];
             const ticket = req.query["ticket"];
             const language = req.query["lang"];
@@ -116,7 +117,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             res.redirect(launchUrl);
         });
 
-        api.post(path + "/replay/get", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        router.post("/replay/get", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             try {
                 const roundId = req.body.roundid;
                 const [language] = (req.body.locale || "en_US").toLowerCase().split("_");
@@ -161,7 +162,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/freespins/add", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        router.post("/freespins/add", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             try {
                 const {txid, campaignId} = await this.createFreeBets(req.body);
 
@@ -175,14 +176,14 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/freespins/get", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        router.post("/freespins/get", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             try {
                 const {playerid} = req.body;
                 const nativeId = playerid.toString();
 
                 const player = await Player.findOneBy({nativeId, wallet});
 
-                const campaignsData = await getNativePlayerActiveFreeBetsCampaigns(nativeId, "relax");
+                const campaignsData = await getNativePlayerActiveFreeBetsCampaigns(nativeId, this.wallet);
 
                 const freespins = [];
                 for (const campaignData of campaignsData) {
@@ -239,7 +240,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/games/getgames", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        router.post("/games/getgames", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             const {currency, credentials} = req.body;
             const brand = credentials.partnerid;
 
@@ -275,7 +276,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             res.json({games});
         });
 
-        api.post(path + "/freespins/cancel", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        router.post("/freespins/cancel", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             try {
                 const {freespinsid, playerid} = req.body;
                 const campaignId = freespinsid;
@@ -295,7 +296,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/finalize", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        router.post("/finalize", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             const {roundid, sessionid, partnerid} = req.body;
             try {
                 const timestamp = Date.now() + 5 * 60 * 1000;
@@ -319,7 +320,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.post(path + "/round/getstate", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
+        router.post("/round/getstate", ipFilter(whitelistedIps), this.validateWallet.bind(this), async (req, res) => {
             const {roundid} = req.body;
 
             let gameref = null;
@@ -400,7 +401,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
     }
 
     async transaction(player: Player, transaction: IWalletTransaction, session: ISession): Promise<IWalletBalance> {
-        const txtype = await this.getTransactionType(transaction, player);
+        const txtype = await this.getTransactionType(transaction);
 
         const transactionPayload: any = {
             requestid: v4(),
@@ -457,15 +458,13 @@ export class RelaxWalletAdapter implements IWalletAdapter {
         return transactionResponse.balance != null ? {balance: this.fromRelaxMoney(transactionResponse.balance)} : await this.balance(player, transaction.provider!, transaction.game!, session);
     }
 
-    private async getTransactionType(transaction: IWalletTransaction, player: Player): Promise<string> {
+    private async getTransactionType(transaction: IWalletTransaction): Promise<string> {
         if (transaction.campaignType === "freeBets") {
             if (transaction.type === "withdraw") {
                 return "freespinbet";
             }
 
-            const campaignPlayerDetails = await getFreeBetsPlayerDetails(transaction.campaignId!, player.id);
-            const campaignDetails = await getFreeBetsCampaignDetails(transaction.campaignId!);
-            if (campaignPlayerDetails!.state.used < campaignDetails!.config.bets) {
+            if (transaction.campaignData!.used < transaction.campaignData!.total) {
                 return "freespinpayout";
             }
 
@@ -487,7 +486,7 @@ export class RelaxWalletAdapter implements IWalletAdapter {
             throw new Exception("Skipping Relax initial cancel due to integration requirements", {data: {transactionEntity}});
         }
 
-        const txtype = await this.getTransactionType(transaction, player);
+        const txtype = await this.getTransactionType(transaction);
 
         const transactionPayload = {
             requestid: v4(),
@@ -627,6 +626,9 @@ export class RelaxWalletAdapter implements IWalletAdapter {
         if (brand && this.config.currencyAliasesPerBrand?.[relaxCurrency]?.[brand]) {
             return this.config.currencyAliasesPerBrand[relaxCurrency][brand];
         }
+        if (this.config.currencyAliases?.[relaxCurrency]) {
+            return this.config.currencyAliases[relaxCurrency];
+        }
         return relaxCurrency.toLowerCase();
     }
 
@@ -634,6 +636,13 @@ export class RelaxWalletAdapter implements IWalletAdapter {
         if (this.config.currencyAliasesPerBrand && brand) {
             for (const [relaxCurrency, aliasesPerBrand] of Object.entries(this.config.currencyAliasesPerBrand)) {
                 if (aliasesPerBrand[brand] === currency) {
+                    return relaxCurrency;
+                }
+            }
+        }
+        if (this.config.currencyAliases) {
+            for (const [relaxCurrency, alias] of Object.entries(this.config.currencyAliases)) {
+                if (alias === currency) {
                     return relaxCurrency;
                 }
             }

@@ -54,8 +54,9 @@ type Campaigns {
 
 type Campaign {
     campaignId: ID
-    type: String
     name: String
+    walletCampaignId: String
+    type: String
     createdAt: Float #timestamp
     start: Float #timestamp
     end: Float #timestamp
@@ -79,6 +80,7 @@ input CampaignInput {
     enabled: Boolean #default is true
     type: String #campaign type
     name: String #name of the campaign
+    walletCampaignId: String #present if operator provides the id
     start: Float #timestamp
     end: Float #timestamp
     wallets: [String]
@@ -159,14 +161,22 @@ type Theme {
     icons: JSON
 }
 
+type CurrencyExchangedValue {
+    currency: String!
+    rate: Float!
+    exchangedValue: Float!
+}
+
 type Query {
     schema: String!
     campaigns(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Campaigns! @auth(permission: "campaigns")
     campaignPlayers(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CampaignPlayers! @auth(permission: "campaigns")
     campaignPrizes(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CampaignPrizes! @auth(permission: "campaigns")
     campaignLogs(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): CampaignLogs! @auth(permission: "campaigns")
+    DGE_jackpot(campaignId: ID!, timestamp: JSON!): JSONObject @auth(permission: "campaigns")
     themes(limit: Int, offset: Int, sort: Sort, filter: [Filter], options: JSONObject): Themes! @auth(permission: "campaigns")
     defaultThemes: JSONObject @auth(permission: "campaigns")
+    exchangedPrizeValues(baseValue: Float!): [CurrencyExchangedValue!]! @auth(permission: "campaigns")
 }
 
 type Mutation {

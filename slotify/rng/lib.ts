@@ -1,21 +1,21 @@
-import os from "os";
+import {setPeriodicVerification, verify} from "./verify";
+import {seed, setPeriodicReseeding} from "./seed";
+import {setBackgroundCycling} from "./cycle";
+import {unbiasedRandomInteger} from "./unbiasedRandomInteger";
 
-(global as any).os = os;
+const isaac = require("./isaac.js");
 
-import {setBackgroundCycling, setPeriodicVerification, verify} from "./verify";
-import getRandomFunction from "./getRandomFunction";
-import randomIntegerFn from "./randomInteger";
+seed();
+setPeriodicReseeding();
+setPeriodicVerification(() => isaac.random());
 
-const randFunction: () => number = getRandomFunction();
-
-function random(): number {
-    const number = randFunction();
+export const random = () => {
+    const number = isaac.random();
     verify(number);
     return number;
-}
+};
 
-setPeriodicVerification(randFunction, 10 * 60 * 1000 /* 10 minutes */);
-setBackgroundCycling(randFunction, 10 * 60 * 1000 /* 10 minutes */);
+setBackgroundCycling(random);
 
-export {random};
-export const randomInteger = (limit: number) => randomIntegerFn(limit, random);
+const randomInt32 = () => random() / 2.3283064365386963e-10; //2^-32;
+export const randomInteger = (limit: number) => unbiasedRandomInteger(limit, randomInt32);

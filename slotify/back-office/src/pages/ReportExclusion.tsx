@@ -1,4 +1,5 @@
 import React, {useRef} from "react";
+import {Link} from "react-router-dom";
 import {DataTable, tableFilter} from "../components/DataTable";
 import {Button, DatePicker, Form, Input, Select, Tooltip} from "antd";
 import {InfoCircleOutlined, PlayCircleOutlined} from "@ant-design/icons";
@@ -82,16 +83,34 @@ const ReportExclusion = () => {
         {title: "Id", dataIndex: "id", hidden: true},
         {title: "Start date", dataIndex: "startsAt", sorter: true, ...tableFilter("DATE"), render: (date: any) => (date ? new Date(date).toLocaleString() : "")},
         {title: "End date", dataIndex: "endsAt", sorter: true, ...tableFilter("DATE"), render: (date: any) => (date ? new Date(date).toLocaleString() : "")},
-        {title: "Player Id", dataIndex: "playerId", sorter: true, ...tableFilter("EQUAL")},
+        {title: "Player Id", dataIndex: "playerId", render: (playerId: string) => playerId && <Link to={`/players/${playerId}`}>{playerId}</Link>, sorter: true, ...tableFilter("EQUAL")},
         {title: "Native Id", dataIndex: "nativeId", sorter: true, ...tableFilter("LIKE")},
         {title: "Wallet", dataIndex: "wallet", sorter: true, ...tableFilter("LIKE")},
         {title: "Operator", dataIndex: "operator", sorter: true, ...tableFilter("LIKE")},
         {title: "Brand", dataIndex: "brand", sorter: true, ...tableFilter("LIKE")},
-        {title: "Currency", dataIndex: "currency", render: (value: any) => <span style={{fontFamily: "monospace"}}>{value}</span>},
-        {title: "Inspection", dataIndex: "inspection", sorter: true, render: (value: boolean) => <StatusTag status={value.toString()} />},
-        {title: "Game Win", dataIndex: "gameWin", sorter: true, render: (value: boolean) => <StatusTag status={value.toString()} />},
-        {title: "Comment", dataIndex: "comment"},
-        {title: "Reason", dataIndex: "reason"},
+        {title: "Currency", dataIndex: "currency", sorter: true, ...tableFilter("LIKE")},
+        {
+            title: "Inspection",
+            dataIndex: "inspection",
+            sorter: true,
+            render: (value: boolean) => <StatusTag status={value.toString()} />,
+            ...tableFilter("IN", [
+                {name: "true", value: true},
+                {name: "false", value: false},
+            ]),
+        },
+        {
+            title: "Game Win",
+            dataIndex: "gameWin",
+            sorter: true,
+            render: (value: boolean) => <StatusTag status={value.toString()} />,
+            ...tableFilter("IN", [
+                {name: "true", value: true},
+                {name: "false", value: false},
+            ]),
+        },
+        {title: "Comment", dataIndex: "comment", sorter: true, ...tableFilter("LIKE")},
+        {title: "Reason", dataIndex: "reason", sorter: true, ...tableFilter("LIKE")},
         {
             title: "Actions",
             render: (data: any) => (

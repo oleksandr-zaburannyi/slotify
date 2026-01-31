@@ -3,6 +3,8 @@ import fetch from "@slotify/shared/lib/fetch";
 import * as xml2js from "xml2js";
 import {DateTime} from "../util/luxon";
 import logger from "@slotify/shared/lib/logger";
+import Exception from "@slotify/shared/lib/Exception";
+import {round} from "@slotify/shared/lib/round";
 
 export const ecbFeed: ICurrencyFeed = async (currencies, date) => {
     const rates: Record<string, number> = {};
@@ -28,6 +30,15 @@ export const ecbFeed: ICurrencyFeed = async (currencies, date) => {
                     if (dailyRate) {
                         rates[currency] = parseFloat(dailyRate["$"].rate);
                     }
+                }
+            }
+
+            const baseCurrency = process.env.BASE_CURRENCY!;
+            if (baseCurrency !== "eur") {
+                if (!rates[baseCurrency]) throw new Exception(`Base currency ${baseCurrency} is not supported by ECB feed`);
+
+                for (const [currency, rate] of Object.entries(rates)) {
+                    rates[currency] = round(rate / rates[baseCurrency], 8);
                 }
             }
 

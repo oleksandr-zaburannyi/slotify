@@ -1,14 +1,14 @@
 import Exception from "@slotify/shared/lib/Exception";
 import * as crypto from "crypto";
 import fetch from "@slotify/shared/lib/fetch";
-import {Express, Request, Response} from "express";
+import {Router, Request, Response} from "express";
 import Cipher from "@slotify/shared/lib/Cipher";
 import launch from "../route/launch";
 import IWalletAdapter, {ISession, IWalletAuthenticate, IWalletTransaction} from "./IWalletAdapter";
 import {errorCodes} from "./walletAdapter";
 import {Player} from "../db/model/Player";
 import logger from "@slotify/shared/lib/logger";
-import {cancelCampaign, createCampaign, getAvailableBets, getCampaignByName, getFreeBetsCampaignDetails, getFreeBetsPlayerDetails} from "../util/external";
+import {cancelCampaign, createCampaign, getAvailableBets, getCampaignByName, getFreeBetsCampaignDetails} from "../util/external";
 import {round} from "@slotify/shared/lib/round";
 import {ReportExclusion} from "../db/model/ReportExclusion";
 import {Game} from "../db/model/Game";
@@ -136,12 +136,12 @@ export class AleaWalletAdapter implements IWalletAdapter {
         return `SHA-512=${crypto.createHash("sha512").update(checksum).digest("hex")}`;
     }
 
-    async init(wallet: string, api: Express, path: string, config: IConfig) {
+    async init(wallet: string, router: Router, config: IConfig) {
         this.wallet = wallet;
         this.config = config;
         this.cipher = new Cipher(this.config.secretKey, this.wallet);
 
-        api.get(path + "/launch", async (req: Request<unknown, unknown, unknown, ILaunchQuery>, res: Response) => {
+        router.get("/launch", async (req: Request<unknown, unknown, unknown, ILaunchQuery>, res: Response) => {
             const game = req.query.gameCode;
             const language = req.query.locale;
             const lobbyUrl = req.query.lobbyUrl;
@@ -151,14 +151,14 @@ export class AleaWalletAdapter implements IWalletAdapter {
             const sessionId = req.query.sessionId;
             const currency = req.query.currency;
             const country = req.query.country?.toLowerCase();
-            const theme = brand;
+            const theme = operator + "_" + brand;
             const key = mode === "real" ? this.cipher!.encrypt(JSON.stringify({sessionId, timestamp: Date.now()})) : `::${currency.toLowerCase()}::${country}:${brand}:`;
 
             const launchUrl = await launch(mode, {wallet, lobbyUrl, language, game, operator, key, theme}, req);
             res.redirect(launchUrl);
         });
 
-        api.post(path + "/free-spins", async (req: Request<unknown, unknown, IFreeSpinsBody>, res: Response) => {
+        router.post("/free-spins", async (req: Request<unknown, unknown, IFreeSpinsBody>, res: Response) => {
             const body = (req as any).rawBody || "";
             if (req.headers["digest"] !== this.calculateChecksum(body + this.config.secretKey)) {
                 res.status(500).json({status: "DENIED", code: "INVALID_REQUEST"});
@@ -205,7 +205,7 @@ export class AleaWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.delete(path + "/free-spins/:bonusId", async (req: Request, res: Response) => {
+        router.delete("/free-spins/:bonusId", async (req: Request, res: Response) => {
             if (req.headers["digest"] !== this.calculateChecksum(req.params.bonusId + this.config.secretKey)) {
                 res.status(500).json({status: "DENIED", code: "INVALID_REQUEST"});
                 return;
@@ -231,7 +231,7 @@ export class AleaWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.get(path + "/sessions", async (req: Request, res: Response) => {
+        router.get("/sessions", async (req: Request, res: Response) => {
             const queryString = req.originalUrl.split("?")[1] || "";
             if (req.headers["digest"] !== this.calculateChecksum(queryString + this.config.secretKey)) {
                 res.status(500).json({status: "DENIED", code: "INVALID_REQUEST"});
@@ -296,7 +296,7 @@ export class AleaWalletAdapter implements IWalletAdapter {
             res.json({sessions, pagination});
         });
 
-        api.get(path + "/sessions/:sessionId/transactions", async (req: Request, res: Response) => {
+        router.get("/sessions/:sessionId/transactions", async (req: Request, res: Response) => {
             const queryString = req.originalUrl.split("?")[1] || "";
             if (req.headers["digest"] !== this.calculateChecksum(queryString + this.config.secretKey)) {
                 logger.info("ALEA invalid request", {digest: req.headers["digest"], checksum: this.calculateChecksum(queryString + this.config.secretKey), queryString, secretKey: this.config.secretKey});
@@ -437,8 +437,7 @@ export class AleaWalletAdapter implements IWalletAdapter {
 
     async transaction(player: Player, transaction: IWalletTransaction, session: ISession) {
         if (transaction.campaignType === "freeBets") {
-            const campaignPlayerDetails = await getFreeBetsPlayerDetails(transaction.campaignId!, player.id);
-            if (campaignPlayerDetails?.finished) {
+            if (transaction.type === "deposit" && transaction.campaignData!.used === transaction.campaignData?.total) {
                 const campaign = await getFreeBetsCampaignDetails(transaction.campaignId!);
                 if (!campaign) throw new Exception("Couldn't find campaign name");
                 const bonusId = campaign.name.replace(campaignPrefix, "");
@@ -447,7 +446,7 @@ export class AleaWalletAdapter implements IWalletAdapter {
                     id: transaction.transactionId,
                     bonusId,
                     cost: round(campaign.config.amount * campaign.config.bets, 2),
-                    winAmount: campaignPlayerDetails.state.totalWin,
+                    winAmount: transaction.campaignData!.totalWin,
                     currency: session.data.currency,
                     gameCode: transaction.game!,
                     round: {

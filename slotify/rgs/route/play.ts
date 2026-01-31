@@ -23,7 +23,7 @@ import {isDevMode} from "@slotify/shared/lib/isDevMode";
 import {sendAlert} from "@slotify/shared/lib/sendAlert";
 import {executeInQueue} from "@slotify/shared/lib/queue";
 import {serviceMetrics} from "../util/metrics";
-import {promoPlay} from "../util/promoUtil";
+import {promoPlay, updatePromoWin} from "../util/promoUtil";
 
 export type IPlayRequest = {
     bet: number;
@@ -308,10 +308,11 @@ export default async function play(
                     `Player has been blocked due to usage of incorrect API (${error.message})<br/>
                     Player Id: ${playerId}<br/>
                     Player nativeId: ${player.nativeId}<br/>
+                    Player nickname: ${player.nickname || ""}<br/>
                     Game: ${game}<br/>
                     Wallet: ${wallet}<br/>
                     Operator: ${operator}<br/>
-                    Brand: ${brand}<br/><br/>
+                    Brand: ${brand || ""}<br/><br/>
                     <a href="${process.env.URL}/backoffice/rounds/${roundId}">Open in Back office</a><br/>
                     `,
                 );
@@ -363,16 +364,19 @@ export async function sendPlay(
         cheat?: string;
     },
     decimals: number,
-): Promise<Pick<Wager, "win" | "state" | "data" | "next"> & {promo: any}> {
+): Promise<Pick<Wager, "win" | "state" | "data" | "next" | "promo">> {
     const roundRngState = await getRoundRngState(settingsFilter, player.playerId, roundId, game);
-    const {win, state, data, next, feed, rngPayload, campaigns} = await playRequest(provider, game, {...request, roundRngState}, decimals);
+    let {win, state, data, next, feed, rngPayload, campaigns} = await playRequest(provider, game, {...request, roundRngState}, decimals);
     await updateRoundRngCursor(roundId, roundRngState, rngPayload, !Wager.hasNextAction({next}));
-    await Wager.insert({step, win, state, data, next, roundId, bet, action: request.action, params: request.params, auto: false});
 
-    let promo;
+    let promo = request.promo;
     if (campaigns) {
-        promo = campaigns ? await promoPlay(player, provider, game, roundId, step, campaigns) : undefined;
+        promo = {...request.promo, ...(await promoPlay(player, provider, game, roundId, step, campaigns))};
     }
+
+    win = updatePromoWin(win, promo);
+
+    await Wager.insert({step, win, state, data, next, roundId, bet, action: request.action, params: request.params, promo, auto: false});
 
     if (feed != null) {
         await GameFeed.insert({game, roundId, wagerStep: step, data: feed});

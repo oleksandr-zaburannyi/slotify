@@ -1,7 +1,7 @@
 /**
  * Slotegrator wallet adapter
  */
-import {Express, NextFunction, Request, Response} from "express";
+import {Router, NextFunction, Request, Response} from "express";
 import {check} from "express-validator";
 import * as crypto from "crypto";
 import {gql} from "graphql-request";
@@ -25,19 +25,6 @@ interface IConfig {
     secretKey: string;
     timeout?: number;
 }
-
-const failedTransactionErrorCodes: string[] = [
-    "BET_FAILED_KNOWN_ERROR",
-    "INTERNAL_ERROR",
-    "SESSION_NOT_FOUND",
-    "TRANSACTION_PREPARING_ERROR",
-    "TRANSACTION_DENIED",
-    "INVALID_SIGN",
-    "AMOUNT_SHOULD_BE_POSITIVE",
-    "ACTION_IS_NOT_EXIST",
-    "WRONG_INPUT_PARAMETERS",
-    "TRANSACTION_IN_PROGRESS",
-];
 
 export class SlotegratorWalletAdapter implements IWalletAdapter {
     wallet!: string;
@@ -70,15 +57,15 @@ export class SlotegratorWalletAdapter implements IWalletAdapter {
         return next();
     }
 
-    async init(wallet: string, api: Express, path: string, config: IConfig) {
+    async init(wallet: string, router: Router, config: IConfig) {
         this.wallet = wallet;
         this.config = config;
         this.campaignPrefix = "slotegrator-api";
         this.cipher = new Cipher(this.config.secretKey, this.wallet);
 
         // wallet/slotegrator/launch
-        api.post(
-            path + "/launch",
+        router.post(
+            "/launch",
             this.validateServer.bind(this),
             this.checkMode.bind(this),
             validate([
@@ -130,8 +117,8 @@ export class SlotegratorWalletAdapter implements IWalletAdapter {
         );
 
         // wallet/slotegrator/addFreeRounds
-        api.post(
-            path + "/addFreeRounds",
+        router.post(
+            "/addFreeRounds",
             this.validateServer.bind(this),
             validate([
                 check("client_id").exists().notEmpty().isString().isLength({max: 255}),
@@ -219,8 +206,8 @@ export class SlotegratorWalletAdapter implements IWalletAdapter {
         );
 
         // wallet/slotegrator/removeFreeRounds
-        api.post(
-            path + "/removeFreeRounds",
+        router.post(
+            "/removeFreeRounds",
             this.validateServer.bind(this),
             validate([check("client_id").exists().notEmpty().isString().isLength({max: 255}), check("campaign_id").exists().notEmpty().isString().isLength({max: 1024})]),
             async (req, res) => {
@@ -317,7 +304,7 @@ export class SlotegratorWalletAdapter implements IWalletAdapter {
         return data;
     }
 
-    private async fetch(path: string, method: string, params: any, hash?: string): Promise<any> {
+    private async fetch(path: string, method: string, params: any, hash?: string, retry: number = 1): Promise<any> {
         const body = params ? JSON.stringify(params) : undefined;
         const headers: Record<string, string> = {};
 
@@ -328,7 +315,6 @@ export class SlotegratorWalletAdapter implements IWalletAdapter {
         let text;
         const url = `${this.config.url}${path}`;
 
-        let retry = 1;
         do {
             try {
                 const response = await fetch(url, {method, body, headers, timeout: (this.config.timeout || 5) * 1000});
@@ -347,9 +333,7 @@ export class SlotegratorWalletAdapter implements IWalletAdapter {
             if (json?.code) {
                 if (json.code === "INSUFFICIENT_BALANCE") {
                     throw new Exception(json.message, {code: errorCodes.INSUFFICIENT_FUNDS});
-                } else if (json.code === "BET_FAILED_UNKNOWN_ERROR") {
-                    throw new Exception(json.message, {code: errorCodes.UNKNOWN});
-                } else if (failedTransactionErrorCodes.includes(json.code)) {
+                } else if (json.code === "INTERNAL_ERROR") {
                     throw new Exception(json.message, {code: errorCodes.TRANSACTION_FAILED});
                 }
                 if (retry === 0) {
@@ -396,7 +380,7 @@ export class SlotegratorWalletAdapter implements IWalletAdapter {
             amount,
         };
 
-        const data = await this.fetch("/", "POST", params, this.hashData(params));
+        const data = await this.fetch("/", "POST", params, this.hashData(params), isWithdraw ? 0 : 1);
 
         const {balance} = data;
 

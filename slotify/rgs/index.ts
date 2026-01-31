@@ -32,7 +32,7 @@ import feed from "./route/feed";
 import closeRound from "./route/closeRound";
 import logger from "@slotify/shared/lib/logger";
 import walletMessage from "./route/walletMessage";
-import {rooms} from "./multiplayer/rooms";
+import {roomHistory, rooms} from "./multiplayer/rooms";
 import {onConnected, onMessage, onSystemConnected, onSystemMessage} from "./multiplayer/websocket";
 import {initTicks} from "./multiplayer/tick";
 import {initRedis} from "@slotify/shared/lib/redis";
@@ -44,6 +44,8 @@ import balance from "./route/balance";
 import {currencyExchangeRates} from "./route/currencyExchangeRates";
 import {initRgsMetrics} from "./util/metrics";
 import {currencySymbols} from "./route/currencySymbols";
+import {ISettingsFilter} from "./db/model/Settings";
+import {getPlayerDetails} from "./util/adapterUtil";
 
 async function initApi(api: Express) {
     api.use(async (req, res, next) => {
@@ -66,7 +68,10 @@ async function initApi(api: Express) {
         async (req, res) => {
             const ip = getIp(req);
             const channel = getChannel(req.headers["user-agent"]);
-            res.json(await authenticate(req.body.wallet, req.body.operator, req.body.key, req.body.provider, req.body.game, channel, ip, req.get("ip-blocked-country")));
+            const ipCountry = req.get("X-IP-Country");
+            const ipRegion = req.get("X-IP-Region");
+
+            res.json(await authenticate(req.body.wallet, req.body.operator, req.body.key, req.body.provider, req.body.game, channel, ip, ipCountry, ipRegion));
         },
     );
 
@@ -154,8 +159,10 @@ async function initApi(api: Express) {
         res.json(await games());
     });
 
-    api.get("/currencyDecimals", async (req, res) => {
-        res.json(await currencyDecimals());
+    api.get("/currencyDecimals", auth.verify("player", true), validate([query("playerId").isUUID().optional()]), async (req, res) => {
+        const {playerId} = req.query as Record<string, any>;
+        const filter: ISettingsFilter = playerId ? await getPlayerDetails(playerId) : res.locals.user || {};
+        res.json(await currencyDecimals(filter));
     });
 
     api.get("/currencySymbols", async (req, res) => {
@@ -170,6 +177,11 @@ async function initApi(api: Express) {
         const {provider, game} = req.query as Record<string, any>;
         const {currency, wallet, operator, brand, jurisdiction} = res.locals.user as IPlayer;
         res.json(await rooms(provider, game, currency, wallet, operator, brand, jurisdiction));
+    });
+
+    api.get("/room/history", validate([query("roomId").isString().exists().isLength({max: 255})]), async (req, res) => {
+        const {roomId} = req.query as Record<string, any>;
+        res.json(await roomHistory(roomId));
     });
 
     api.get(
@@ -204,8 +216,8 @@ async function initApi(api: Express) {
     });
 
     api.post("/api/websocket/systemConnected", validate([body("channel").isString().exists(), body("systemId").isString().exists(), body("signature").isString().exists()]), async (req, res) => {
-        const {channel, systemId, signature} = req.body;
-        await onSystemConnected(channel, systemId, signature);
+        const {channel, systemId, signature, ip} = req.body;
+        await onSystemConnected(channel, systemId, signature, ip);
         res.json({success: true});
     });
 
@@ -270,17 +282,31 @@ async function init() {
         replica: {...dbOptions("rgs"), host: process.env.REPLICA_DB_HOST, port: process.env.REPLICA_DB_PORT || process.env.DB_PORT, synchronize: false, migrationsRun: false, installExtensions: false} as DataSourceOptions,
         primary: {...dbOptions("rgs")},
     });
+
     await initApi(api);
     initMail();
 
+    const rgsMode = process.env.RGS_MODE;
+    logger.info(`rgsMode: ${rgsMode}`);
+    const runTicks = rgsMode === "multiplayer" || !rgsMode;
+    logger.info(`runTicks: ${runTicks}`);
+
     await initRedis("rgs");
-    initScheduler(30);
-    await initTicks();
-    await scheduledTasks();
+
+    if (runTicks) {
+        await initTicks();
+    }
+    if (rgsMode !== "multiplayer") {
+        await scheduledTasks();
+    }
+
+    initScheduler(runTicks ? 30 : 1000);
+
     initRgsMetrics();
 
     const server = await startService(api);
     await verifyCriticalFiles().catch(error => logger.error(error));
+
     return {api, server};
 }
 

@@ -16,7 +16,18 @@ import Exception from "@slotify/shared/lib/Exception";
 import {gql} from "graphql-request";
 import {cleanupAfterTests} from "./cleanup";
 
-jest.mock("@slotify/rng/lib/verify", () => ({verify: (jest.requireActual("@slotify/rng/lib/verify") as any).verify, setPeriodicVerification: jest.fn, setBackgroundCycling: jest.fn}));
+jest.mock("@slotify/rng/lib/verify", () => ({
+    verify: (jest.requireActual("@slotify/rng/lib/verify") as any).verify,
+    setPeriodicVerification: jest.fn,
+}));
+jest.mock("@slotify/rng/lib/cycle", () => ({
+    cycle: (jest.requireActual("@slotify/rng/lib/cycle") as any).cycle,
+    setBackgroundCycling: jest.fn,
+}));
+jest.mock("@slotify/rng/lib/seed", () => ({
+    seed: (jest.requireActual("@slotify/rng/lib/seed") as any).seed,
+    setPeriodicReseeding: jest.fn,
+}));
 jest.mock("@slotify/shared/lib/fetch");
 const mockedFetchAndParse = fetchAndParse as jest.MockedFunction<typeof fetchAndParse>;
 
@@ -180,6 +191,52 @@ describe("freeBets", () => {
         expect(res2.body.playerState.used).toEqual(0);
     });
 
+    test("withdrawFailed cleans up withdraw state", async () => {
+        const type = "freeBets";
+        const {campaignId} = await Campaign.createWithState({name: "test", type, config: {bets: 1, amount: 1, currency: "eur"}});
+        const player = {
+            provider: "my-provider",
+            game: "my-game",
+            playerId: v4(),
+            wallet: "demo",
+            operator: "my-operator",
+            brand: "my-brand",
+            nativeId: "my-native-id",
+            currency: "sek",
+        };
+        const token = auth.sign(player, "player");
+
+        mockedFetchAndParse.mockReturnValue(Promise.resolve({converted: 10}));
+        await request(api).post("/api/authenticate").send(player).expect(200);
+        const roundId = v4();
+
+        await request(api).post(`/campaigns/${campaignId}/opt/`).send({optIn: true, game: "test-game", provider: "test-provider"}).auth(token, {type: "bearer"}).expect(200);
+
+        const transaction = {transactionId: v4(), amount: 10, roundId: roundId, roundFinished: false, category: "normal"};
+        const data = {...player, ...transaction, type};
+
+        // Call withdraw - this sets _rounds[roundId] = "withdraw"
+        await request(api).post("/api/transaction/withdraw").send(data).expect(200);
+
+        // Call withdrawFailed - this should clean up the round tracking
+        await request(api).post("/api/transaction/withdrawFailed").send(data).expect(200);
+
+        // Verify used is still 0 since withdrawFinished was never called
+        const res = await request(api)
+            .get("/campaigns/" + campaignId + "?" + new URLSearchParams({provider: "my-provider", game: "my-game"}).toString())
+            .auth(token, {type: "bearer"})
+            .expect(200);
+        expect(res.body.playerState.used).toEqual(0);
+
+        // Verify the round can be played again (proves cleanup happened)
+        const newTransaction = {transactionId: v4(), amount: 10, roundId: roundId, roundFinished: false, category: "normal"};
+        const withdrawRes = await request(api)
+            .post("/api/transaction/withdraw")
+            .send({...player, ...newTransaction, type})
+            .expect(200);
+        expect(withdrawRes.body).toMatchObject({campaignId, campaignType: type});
+    });
+
     test("visibility caching 1", async () => {
         const type = "freeBets";
         const {campaignId} = await Campaign.createWithState({name: "test", type, config: {bets: 2, amount: 1, currency: "eur"}});
@@ -313,6 +370,7 @@ describe("freeBets", () => {
             campaignId,
             campaignType: "freeBets",
             campaigns: [campaignId],
+            walletCampaignId: null,
         });
 
         await request(api).post("/api/transaction/withdrawFinished").send(promoWithdrawRequest).expect(200);
@@ -340,6 +398,7 @@ describe("freeBets", () => {
             campaignId,
             campaignType: "freeBets",
             campaigns: [campaignId],
+            walletCampaignId: null,
         });
     }, 1000000);
 
@@ -381,6 +440,7 @@ describe("freeBets", () => {
             campaignId,
             campaignType: "freeBets",
             campaigns: [campaignId],
+            walletCampaignId: null,
         });
 
         await request(api).post("/api/transaction/withdrawFinished").send(promoWithdrawRequest).expect(200);
@@ -403,6 +463,7 @@ describe("freeBets", () => {
             campaignId,
             campaignType: "freeBets",
             campaigns: [campaignId],
+            walletCampaignId: null,
         });
     });
 });

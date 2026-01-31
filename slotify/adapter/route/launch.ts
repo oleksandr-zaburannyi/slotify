@@ -21,6 +21,7 @@ export type IParamsReal = {
     customExit?: string;
     channel?: string;
     theme?: string;
+    hostname?: string;
 };
 
 export type IParamsFun = {
@@ -31,6 +32,7 @@ export type IParamsFun = {
     depositUrl?: string;
     channel?: string;
     theme?: string;
+    hostname?: string;
 };
 
 export type IParamsReplay = {
@@ -42,6 +44,7 @@ export type IParamsReplay = {
     depositUrl?: string;
     channel?: string;
     theme?: string;
+    hostname?: string;
 };
 
 export default async function launch(mode: "real" | "fun" | "replay", params: IParamsReal | IParamsFun | IParamsReplay, req?: Request<any, any, any, any>) {

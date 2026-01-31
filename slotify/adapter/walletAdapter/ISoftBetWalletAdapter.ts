@@ -1,6 +1,6 @@
 import * as crypto from "crypto";
 import IWalletAdapter, {ISession, IWalletTransaction} from "./IWalletAdapter";
-import {Express, Request, Response} from "express";
+import {Router, Request, Response} from "express";
 import Exception, {IExceptionPopup} from "@slotify/shared/lib/Exception";
 import Cipher from "@slotify/shared/lib/Cipher";
 import logger from "@slotify/shared/lib/logger";
@@ -179,13 +179,13 @@ export class ISoftBetWalletAdapter implements IWalletAdapter {
         }
     }
 
-    async init(wallet: string, api: Express, path: string, config: IConfig) {
+    async init(wallet: string, router: Router, config: IConfig) {
         this.wallet = wallet;
         this.config = config;
 
         this.cipher = new Cipher(this.config.secretKey, this.wallet);
 
-        api.get(path + "/launch", async (req: Request<unknown, unknown, unknown, ILunchReal | ILaunchFun>, res) => {
+        router.get("/launch", async (req: Request<unknown, unknown, unknown, ILunchReal | ILaunchFun>, res) => {
             try {
                 const language = req.query.language;
                 const game = req.query.providergameid;
@@ -214,7 +214,7 @@ export class ISoftBetWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.all(path + "/gsp/freerounds_create", async (req: Request<any, IFreeRoundsResponse, IFreeRoundsCreateRequest, any>, res) => {
+        router.all("/gsp/freerounds_create", async (req: Request<any, IFreeRoundsResponse, IFreeRoundsCreateRequest, any>, res) => {
             try {
                 this.validateServer(req.body.auth.signature, JSON.stringify(req.body.request));
                 await this.createFreeRounds(req);
@@ -224,7 +224,7 @@ export class ISoftBetWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.all(path + "/gsp/freerounds_cancel", async (req: Request<any, IFreeRoundsResponse, IFreeRoundsCancelRequest, any>, res) => {
+        router.all("/gsp/freerounds_cancel", async (req: Request<any, IFreeRoundsResponse, IFreeRoundsCancelRequest, any>, res) => {
             try {
                 this.validateServer(req.body.auth.signature, JSON.stringify(req.body.request));
                 await this.cancelFreeRounds(req);
@@ -234,7 +234,7 @@ export class ISoftBetWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.all(path + "/gsp/players_register", async (req: Request<any, IFreeRoundsResponse, IFreeRoundsPlayerRegister, any>, res) => {
+        router.all("/gsp/players_register", async (req: Request<any, IFreeRoundsResponse, IFreeRoundsPlayerRegister, any>, res) => {
             try {
                 this.validateServer(req.body.auth.signature, JSON.stringify(req.body.request));
                 await this.registerFreeRoundsPlayer(req);
@@ -244,7 +244,7 @@ export class ISoftBetWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.all(path + "/gsp/players_remove", async (req: Request<any, IFreeRoundsResponse, IFreeRoundsPlayerRemove, any>, res) => {
+        router.all("/gsp/players_remove", async (req: Request<any, IFreeRoundsResponse, IFreeRoundsPlayerRemove, any>, res) => {
             try {
                 this.validateServer(req.body.auth.signature, JSON.stringify(req.body.request));
                 await this.removeFreeRoundsPlayer(req);
@@ -254,7 +254,7 @@ export class ISoftBetWalletAdapter implements IWalletAdapter {
             }
         });
 
-        api.all(path + "/gsp", async (req: Request<any, any, any, any>, res) => {
+        router.all("/gsp", async (req: Request<any, any, any, any>, res) => {
             if (req.query.command === "player_round_history") {
                 this.validateServer(req.query.hash, req.query.command + "," + req.query.roundid);
                 return this.playerRoundHistory(req, res);

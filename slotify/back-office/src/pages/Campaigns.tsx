@@ -257,6 +257,7 @@ const Campaigns = () => {
         {title: "Player Ids", dataIndex: "playerIds", sorter: true, ...tableFilter("LIKE"), render: (values: string[], data: any, highlight: string) => <TagList tags={values} initialMaxTags={5} highlight={highlight} />},
         {title: "Native Ids", dataIndex: "nativeIds", sorter: true, ...tableFilter("LIKE"), render: (values: string[], data: any, highlight: string) => <TagList tags={values} initialMaxTags={5} highlight={highlight} />},
         {title: "Config", dataIndex: "config", hidden: true},
+        {title: "Wallet Campaign Id", dataIndex: "walletCampaignId", ...tableFilter("LIKE")},
         {title: "Theme", dataIndex: "themeId", render: (themeId: any) => (themesRef.current as any).findLast((theme: any) => theme.themeId === themeId)?.name},
         {
             title: "Actions",

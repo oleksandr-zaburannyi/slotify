@@ -1,6 +1,6 @@
 {
     "name": "@slotify/rgs",
-    "version": "4.1.0",
+    "version": "4.2.0",
     "author": "",
     "license": "UNLICENSED",
     "publishConfig": {
@@ -20,16 +20,17 @@
         "test": "jest --runInBand",
         "docs": "npx mdpdf docs/GAME_CLIENT_INTEGRATION.md; npx mdpdf docs/GAME_SERVER_INTEGRATION.md; npx mdpdf docs/RGS_GUIDEBOOK.md; npx mdpdf docs/GAME_INTEGRATION_PROCESS.md",
         "build": "rm -Rf lib/* && tsc",
+        "delete-source": " find . -type f -name '*.ts' -delete",
         "start": "node lib/index.js",
         "start:dev": "ts-node-dev --transpile-only --exit-child index.ts",
-        "obfuscate": "npx --yes javascript-obfuscator --target=node --options-preset=low-obfuscation --output lib/ lib/ && find . -type f -name '*.ts' -delete"
+        "obfuscate": "npx --yes javascript-obfuscator --target=node --options-preset=low-obfuscation --output lib/ lib/"
     },
     "dependencies": {
         "@graphql-tools/graphql-file-loader": "^8.0.22",
         "@graphql-tools/load": "^8.1.2",
         "@graphql-tools/schema": "^10.0.25",
         "@jest/globals": "^30.0.5",
-        "@slotify/shared": "^2.1.1",
+        "@slotify/shared": "^2.2.0",
         "@types/express": "^5.0.3",
         "@types/jest": "^30.0.0",
         "@types/node": "^24.1.0",

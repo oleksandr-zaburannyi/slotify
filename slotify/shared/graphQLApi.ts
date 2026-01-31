@@ -158,7 +158,7 @@ export async function generate(entity: EntityTarget<ObjectLiteral>, alias: strin
 
         const queryCost = await getQueryCost(query);
         if (queryCost > maxQueryCost) {
-            throw new Exception(`Sorting column '${sort.field}' is too expensive. Add some filters to limit data scope and retry.`);
+            throw new Exception(`Sorting column '${sort.field}' is too expensive. Add some filters to limit data scope and retry.`, {data: {query}});
         }
     }
 

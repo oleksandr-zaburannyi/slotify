@@ -4,7 +4,9 @@ import {Express} from "express";
 import {setEnvVariables} from "./setEnvVariables";
 import {closeServer, initService} from "@slotify/shared/lib/testUtils";
 
-jest.mock("@slotify/rng/lib/verify", () => ({verify: jest.requireActual("@slotify/rng/lib/verify").verify, setPeriodicVerification: jest.fn, setBackgroundCycling: jest.fn}));
+jest.mock("@slotify/rng/lib/verify", () => ({verify: jest.requireActual("@slotify/rng/lib/verify").verify, setPeriodicVerification: jest.fn}));
+jest.mock("@slotify/rng/lib/cycle", () => ({cycle: jest.requireActual("@slotify/rng/lib/cycle").cycle, setBackgroundCycling: jest.fn}));
+jest.mock("@slotify/rng/lib/seed", () => ({seed: jest.requireActual("@slotify/rng/lib/seed").seed, setPeriodicReseeding: jest.fn}));
 
 let api: Express;
 beforeAll(async () => {

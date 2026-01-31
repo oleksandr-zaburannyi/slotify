@@ -9,6 +9,7 @@ import env from "../lib/env";
 import IpAddress from "../components/IpAddress";
 import Currency from "../components/Currency";
 import {campaignTypes} from "./promo/campaignTypes";
+import JsonView from "react18-json-view";
 
 const Transactions = () => {
     const initialValues = {convert: false};
@@ -22,7 +23,7 @@ const Transactions = () => {
         {title: "Round Id", dataIndex: "roundId", render: (roundId: string) => <Link to={`/rounds/${roundId}`}>{roundId}</Link>, sorter: true, ...tableFilter("EQUAL")},
         {title: "Transaction Id", dataIndex: "transactionId", sorter: true, ...tableFilter("EQUAL")},
         {title: "Session Id", dataIndex: "sessionId", sorter: true, ...tableFilter("EQUAL")},
-        {title: "Player Id", dataIndex: "playerId", sorter: true, ...tableFilter("EQUAL")},
+        {title: "Player Id", dataIndex: "playerId", render: (playerId: string) => <Link to={`/players/${playerId}`}>{playerId}</Link>, sorter: true, ...tableFilter("EQUAL")},
         {title: "Native Id", dataIndex: "nativeId", sorter: true, ...tableFilter("STARTS_WITH")},
         {
             title: "Type",
@@ -84,6 +85,8 @@ const Transactions = () => {
             render: (type: string) => (campaignTypes[type] ? campaignTypes[type].name : type),
         },
         {title: "Campaign Id", dataIndex: "campaignId", sorter: true, ...tableFilter("EQUAL"), render: (campaignId: string) => <Link to={`/campaigns/${campaignId}`}>{campaignId}</Link>},
+        {title: "Wallet Campaign Id", dataIndex: "walletCampaignId", sorter: true, ...tableFilter("EQUAL")},
+        {title: "Campaign Data", dataIndex: "campaignData", render: (data: any) => data && <JsonView collapsed={true} enableClipboard={false} src={data} />},
         {title: "IP", dataIndex: "ip", sorter: true, ...tableFilter("EQUAL"), render: (ip?: string) => <IpAddress ip={ip} />},
         {title: "Score", dataIndex: "verificationScore", sorter: true, render: (value: any) => value !== null && <span style={{fontFamily: "monospace"}}>{value} points</span>},
         {

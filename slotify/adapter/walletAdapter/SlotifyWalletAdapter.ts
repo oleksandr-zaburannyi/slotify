@@ -1,7 +1,7 @@
 import Exception from "@slotify/shared/lib/Exception";
 import * as crypto from "crypto";
 import fetch from "@slotify/shared/lib/fetch";
-import {Express} from "express";
+import {Router} from "express";
 import IWalletAdapter, {IWalletAuthenticate, IWalletBalance, IWalletTransaction} from "./IWalletAdapter";
 import {Player} from "../db/model/Player";
 import logger from "@slotify/shared/lib/logger";
@@ -79,7 +79,7 @@ export class SlotifyWalletAdapter implements IWalletAdapter {
             .digest("hex");
     }
 
-    async init(wallet: string, api: Express, path: string, config: IConfig) {
+    async init(wallet: string, router: Router, config: IConfig) {
         this.wallet = wallet;
         this.config = config;
     }
@@ -159,6 +159,9 @@ export class SlotifyWalletAdapter implements IWalletAdapter {
             rgsTransactionId: transaction.transactionId,
             name: transaction.name,
             channel: transaction.channel,
+            campaignId: transaction.campaignId,
+            campaignType: transaction.campaignType,
+            campaignData: transaction.campaignData,
         };
         const data = await this.fetch<ITransactionRequest, ITransactionResponse>("/transaction", "PUT", params);
         const {balance} = data;

@@ -24,6 +24,13 @@ export type ITransactionData = {
     finalizeRelaxRound?: boolean;
 };
 
+export type ICampaignData = {
+    total: number;
+    used: number;
+    amount: number;
+    totalWin: number;
+};
+
 @Entity()
 export class Transaction extends BaseEntity {
     @PrimaryGeneratedColumn("uuid") id!: string;
@@ -53,6 +60,8 @@ export class Transaction extends BaseEntity {
     @Column({nullable: true}) channel?: string;
     @Column({nullable: true}) campaignType?: string;
     @Column({nullable: true}) campaignId?: string;
+    @Column({nullable: true}) walletCampaignId?: string;
+    @Column({nullable: true, type: "jsonb"}) campaignData?: ICampaignData;
     @Column({nullable: true}) ip?: string;
     @Column({}) auto!: boolean;
     @Column({nullable: true, type: "decimal", transformer: toFloat}) balanceAfter!: number;

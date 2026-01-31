@@ -37,7 +37,7 @@ export class ReportExclusion extends BaseEntity {
     static readonly PLAYER_EXCLUSION_CHECK_SQL = `
         SELECT excluded, reason
         FROM adapter_player player
-        LEFT JOIN LATERAL (${ReportExclusion.EXCLUSION_CHECK_SQL("player.id", "player.operator", "player.brand", "$2", "inspection")}) ON TRUE
+        LEFT JOIN LATERAL (${ReportExclusion.EXCLUSION_CHECK_SQL("player.id", "player.operator", "player.brand", "$2", "inspection")}) exclusion ON TRUE
         WHERE player.id = $1
         LIMIT 1
     `;

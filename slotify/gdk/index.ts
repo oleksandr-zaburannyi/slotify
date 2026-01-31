@@ -11,6 +11,7 @@ import {IMultiplayerGame} from "./IMultiplayerGame";
 import {createRandom} from "@slotify/rng/lib/random/factory";
 import {createMultiplayerRng, createRng} from "./helper/createRng";
 import {createMultiplayerProofBuilder, createProofBuilder} from "@slotify/rng/lib/random/createProofBuilder";
+import {initServices} from "./services";
 
 async function initApi(api: express.Express) {
     if (process.env.STATIC_DIR) {
@@ -86,6 +87,7 @@ async function initApi(api: express.Express) {
         async (req, res) => {
             const game = getGame(req.params.game) as IGame;
             const {params, action, bet, sideBet, state, coin, cheat, variant, roundRngState, betLimits, promo} = req.body;
+            const immutableState: any = JSON.stringify(state) || null;
 
             const rng = createRng({
                 game,
@@ -95,7 +97,6 @@ async function initApi(api: express.Express) {
             });
 
             const config = game.config ? game.config(variant) : {};
-            const request: IPlayRequest = {bet, sideBet, action, params, state, coin, config, variant, promo};
 
             let wager: IWager;
             let response: IPlayResponse;
@@ -103,6 +104,7 @@ async function initApi(api: express.Express) {
             const maxSimulations = 500000;
             do {
                 if (++simulations >= maxSimulations) throw new Exception(`Couldn't satisfy cheat ${cheat} in ${maxSimulations} simulations`);
+                const request: IPlayRequest = {bet, sideBet, action, params, state: JSON.parse(immutableState), coin, config, variant, promo};
                 response = game.play(request, rng.random, betLimits);
                 wager = {...request, ...response};
             } while (!rng.acceptsWager(wager));
@@ -187,8 +189,8 @@ async function initApi(api: express.Express) {
         const game = getGame(req.params.game) as IMultiplayerGame;
         if (!game.init) throw new Exception(`Game ${req.params.game} doesn't seem to support multiplayer mode`);
 
-        const {time, config} = req.body;
-        const response = await game.init({time, config}, createRandom());
+        const {time, roomId, config} = req.body;
+        const response = await game.init({time, roomId, config}, createRandom());
 
         res.json({...response});
     });
@@ -197,6 +199,7 @@ async function initApi(api: express.Express) {
         "/api/multiplayer/:game/command",
         validate([
             param("game").isString().exists(),
+            body("config").exists(),
             body("state").exists(),
             body("betLimits").optional(),
             body("playerId").isString().exists(),
@@ -238,19 +241,23 @@ async function initApi(api: express.Express) {
         }
     });
 
-    api.post("/api/multiplayer/:game/tick", validate([body("commands").exists(), body("state").exists(), body("time").isInt().exists(), body("drawId").isString().exists(), body("rngState").optional()]), async (req, res) => {
-        const game = getGame(req.params.game) as IMultiplayerGame;
+    api.post(
+        "/api/multiplayer/:game/tick",
+        validate([body("commands").exists(), body("config").exists(), body("state").exists(), body("time").isInt().exists(), body("drawId").isString().exists(), body("rngState").optional()]),
+        async (req, res) => {
+            const game = getGame(req.params.game) as IMultiplayerGame;
 
-        const {rngState, ...request} = req.body;
+            const {rngState, ...request} = req.body;
 
-        const rng = createMultiplayerRng(rngState);
+            const rng = createMultiplayerRng(rngState);
 
-        const response = await game.tick(request, rng.random);
+            const response = await game.tick(request, rng.random);
 
-        const rngPayload = rng.getPayload();
+            const rngPayload = rng.getPayload();
 
-        res.json({...response, rngPayload});
-    });
+            res.json({...response, rngPayload});
+        },
+    );
 
     api.post("/api/multiplayer/:game/replay", validate([body("state").exists(), body("playerId").isString().optional()]), async (req, res) => {
         const game = getGame(req.params.game) as IMultiplayerGame;
@@ -262,6 +269,7 @@ async function initApi(api: express.Express) {
 async function init() {
     const {api} = await createService("games", "10mb");
     await initGames();
+    await initServices(api);
     await initApi(api);
     const server = await startService(api);
     return {api, server};
